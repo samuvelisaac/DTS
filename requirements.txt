@@ -1,0 +1,6 @@
+streamlit
+pandas
+json
+requests
+urllib3
+os
