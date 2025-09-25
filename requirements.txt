@@ -2,4 +2,3 @@ streamlit
 pandas
 requests
 urllib3
-base64
