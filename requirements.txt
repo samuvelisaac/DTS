@@ -2,5 +2,6 @@ streamlit
 pandas
 requests
 urllib3
+httpx
 
 
