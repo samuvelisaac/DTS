@@ -19,17 +19,17 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 load_dotenv()  # Load environment variables from .env
 
 # Program 1 config
-API_KEY_P1 = os.getenv("API_KEY_P1", "")  # fallback from .env if needed
-API_URL_P1 = os.getenv("API_URL_P1")
+API_KEY_P1 = st.secrets["API_KEY_P1"]  # fallback from .env if needed
+API_URL_P1 = st.secrets["API_URL_P1"]
 workflow = {"name": "TSB_Data_Lineage_Generator_WF", "pipelineId": 7024}
 
 # Program 2 config
-API_KEY = os.getenv("API_KEY")
-BASE_URL = os.getenv("BASE_URL")
-ASSET_URL = os.getenv("ASSET_URL")
-LINEAGE_URL = os.getenv("LINEAGE_URL")
-DQ_URL = os.getenv("DQ_URL")
-LOGO_URL = os.getenv("LOGO_URL")
+API_KEY = st.secrets["API_KEY"]
+BASE_URL = st.secrets["BASE_URL"]
+ASSET_URL = st.secrets["ASSET_URL"]
+LINEAGE_URL = st.secrets["LINEAGE_URL"]
+DQ_URL = st.secrets["DQ_URL"]
+LOGO_URL = st.secrets["LOGO_URL"]
 
 # Get system Downloads folder
 DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
