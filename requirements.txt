@@ -3,5 +3,4 @@ pandas
 requests
 urllib3
 httpx
-
-
+load_dotenv
