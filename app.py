@@ -19,7 +19,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 load_dotenv()  # Load environment variables from .env
 
 # Program 1 config
-API_KEY_P1 = st.secrets["API_KEY_P1"]  # fallback from .env if needed
+API_KEY_P1 = st.secrets["API_KEY_P1"]
 API_URL_P1 = st.secrets["API_URL_P1"]
 workflow = {"name": "TSB_Data_Lineage_Generator_WF", "pipelineId": 7024}
 
@@ -31,8 +31,8 @@ LINEAGE_URL = st.secrets["LINEAGE_URL"]
 DQ_URL = st.secrets["DQ_URL"]
 LOGO_URL = st.secrets["LOGO_URL"]
 
-# Get system Downloads folder
-DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
+# Local save folder (inside Streamlit app folder, not user C drive)
+BASE_SAVE_DIR = os.path.join(os.getcwd(), "Generated_Lineage_Files")
 
 # ========================
 # COMMON FUNCTIONS
@@ -60,8 +60,8 @@ def process_agent(file_content):
 
     payload = {
         "pipeLineId": pipeline_id,
-        "userInputs": {"Program_Files": file_content},  # ✅ fixed
-        "executionId": f"exec-{int(time.time())}",      # unique exec ID
+        "userInputs": {"Program_Files": file_content},
+        "executionId": f"exec-{int(time.time())}",
         "user": "your.email@ascendion.com"
     }
 
@@ -213,16 +213,6 @@ def create_dq_monitor(SOURCE_ID, row, idx):
 # ========================
 # STREAMLIT APP
 # ========================
-hide_streamlit_style = """
-    <style>
-    /* Hide top-right processing spinner and stop button */
-    .stStatusWidget, .st-emotion-cache-13ln4jf {
-        display: none !important;
-    }
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
 st.set_page_config(page_title="AAVA DTS Tools", layout="wide")
 
 LOGO_BASE64 = get_base64_image(LOGO_URL)
@@ -256,40 +246,34 @@ with tab1:
         st.subheader("📄 Input File Preview")
         st.text_area("File Content", content, height=200)
 
-        # ✅ Process button
         if st.button("🚀 Process Agent"):
             with st.spinner("Processing..."):
                 result = process_agent(content)
 
             if result["success"]:
                 st.success(f"✅ Process completed in {result['api_duration']}s")
-
-                # Save results into session_state for persistence
                 st.session_state["lineage_results"] = result["raws"]
                 st.session_state["original_filename"] = os.path.splitext(uploaded_file.name)[0]
                 st.session_state["program_type"] = program_type
             else:
                 st.error("❌ Error while processing")
                 errors = result["error"]
-                st.json(errors if not (isinstance(errors, dict) and "errors" in errors) else errors["errors"])
+                st.json(errors)
 
-    # ✅ Display results if available in session_state
     if "lineage_results" in st.session_state:
         raws = st.session_state["lineage_results"]
         original_filename = st.session_state["original_filename"]
         program_type = st.session_state["program_type"]
 
-        # Setup output dir
-        base_dir = os.path.join(DOWNLOADS_DIR, "Generated_Lineage_Files")
         today_folder = datetime.now().strftime("%Y%m%d")
-        output_dir = os.path.join(base_dir, today_folder)
+        output_dir = os.path.join(BASE_SAVE_DIR, today_folder)
+        os.makedirs(output_dir, exist_ok=True)
 
         for agent, raw_output in raws.items():
             st.subheader(f"🔹 Output Preview - {original_filename}")
             try:
                 df = pd.read_csv(StringIO(raw_output), sep=",", quotechar='"')
 
-                # COBOL table fix
                 if program_type == "COBOL":
                     if "Source Table" in df.columns:
                         df["Source Table"] = df["Source Table"].astype(str).apply(
@@ -302,26 +286,26 @@ with tab1:
 
                 st.dataframe(df, use_container_width=True)
 
-                # ✅ Save only when button clicked
-                if st.button(f"⬇️ Download CSV into {output_dir}", key=f"dl_{agent}"):
-                    os.makedirs(output_dir, exist_ok=True)
+                # Save versioned file when user clicks download
+                version = 1
+                while True:
+                    output_file = os.path.join(output_dir, f"{original_filename}_V{version}.csv")
+                    if not os.path.exists(output_file):
+                        break
+                    version += 1
 
-                    # ✅ Compute version
-                    version = 1
-                    while True:
-                        output_file = os.path.join(output_dir, f"{original_filename}_V{version}.csv")
-                        if not os.path.exists(output_file):
-                            break
-                        version += 1
+                csv_data = df.to_csv(index=False)
 
-                    df.to_csv(output_file, index=False)
-                    st.success(f"💾 Saved to: {output_file}")
+                st.download_button(
+                    label=f"⬇️ Download {original_filename}_V{version}.csv",
+                    data=csv_data,
+                    file_name=f"{original_filename}_V{version}.csv",
+                    mime="text/csv"
+                )
 
-                    # 🔑 Clear session_state → hide preview + button after save
-                    del st.session_state["lineage_results"]
-                    del st.session_state["original_filename"]
-                    del st.session_state["program_type"]
-                    st.rerun()
+                # also save on server for history
+                with open(output_file, "w", encoding="utf-8") as f:
+                    f.write(csv_data)
 
             except Exception as e:
                 st.warning(f"⚠️ Could not parse output as CSV ({e}). Showing raw text instead.")
