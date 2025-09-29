@@ -407,8 +407,7 @@ with tab3:
 
         if st.button("🚀 Generate DQ Rules"):
             with st.spinner("Processing DQ Rules..."):
-                # Hardcoded pipeline ID for DQ rules
-                dq_pipeline_id = 7193   # 🔹 replace with actual pipelineId for DQ workflow
+                dq_pipeline_id = 7193  # hardcoded pipeline ID for DQ workflow
 
                 payload = {
                     "pipeLineId": dq_pipeline_id,
@@ -441,18 +440,23 @@ with tab3:
                                 st.subheader(f"🔹 Output Preview - {uploaded_file.name}")
                                 st.dataframe(df, use_container_width=True)
 
-                                # Auto save into Downloads
+                                # ✅ Safe save location (create Downloads if not exists)
                                 original_filename = os.path.splitext(uploaded_file.name)[0]
-                                output_file = os.path.join(DOWNLOADS_DIR, f"{original_filename}.csv")
-#                                df.to_csv(output_file, index=False)
+                                downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+                                os.makedirs(downloads_path, exist_ok=True)
+                                output_file = os.path.join(downloads_path, f"{original_filename}.csv")
 
+                                df.to_csv(output_file, index=False)
                                 st.success(f"✅ DQ Rules generated and saved to: {output_file}")
 
-                                # 🔽 Direct download link
-                                with open(output_file, "rb") as f:
-                                    b64 = base64.b64encode(f.read()).decode()
-                                    href = f'<a href="data:file/csv;base64,{b64}" download="{original_filename}.csv">⬇️ Download {original_filename}.csv</a>'
-                                    st.markdown(href, unsafe_allow_html=True)
+                                # ✅ Streamlit download button (works on cloud too)
+                                csv_data = df.to_csv(index=False).encode("utf-8")
+                                st.download_button(
+                                    label=f"⬇️ Download {original_filename}.csv",
+                                    data=csv_data,
+                                    file_name=f"{original_filename}.csv",
+                                    mime="text/csv"
+                                )
 
                             except Exception as e:
                                 st.warning(f"⚠️ Could not parse API output as CSV ({e}). Showing raw text instead.")
@@ -503,4 +507,3 @@ with tab4:
 
                 st.subheader("✅ Monitor Creation Results")
                 st.dataframe(pd.DataFrame(results), use_container_width=True)
-
