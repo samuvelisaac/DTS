@@ -446,8 +446,9 @@ with tab3:
                                 os.makedirs(downloads_path, exist_ok=True)
                                 output_file = os.path.join(downloads_path, f"{original_filename}.csv")
 
-                                df.to_csv(output_file, index=False)
-                                st.success(f"✅ DQ Rules generated and saved to: {output_file}")
+                                if os.path.exists(downloads_path):
+                                    df.to_csv(output_file, index=False)
+                                    st.success(f"✅ DQ Rules generated and saved to: {output_file}")
 
                                 # ✅ Streamlit download button (works on cloud too)
                                 csv_data = df.to_csv(index=False).encode("utf-8")
