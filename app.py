@@ -277,6 +277,28 @@ if LOGO_BASE64:
 else:
     st.title("AAVA DTS Ally")
 
+# Add this right after you set up your logo/title and before `st.tabs(...)`
+
+st.markdown(
+    """
+    <style>
+    /* Freeze the top logo, title and tab section */
+    .freeze-header {
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        background-color: white; /* match app background */
+        padding-bottom: 5px;
+        border-bottom: 1px solid #ddd;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Wrap logo/title + tabs inside the freeze-header div
+st.markdown('<div class="freeze-header">', unsafe_allow_html=True)
+
 tabs = st.tabs(["📂 Determine Lineage", "🔗 Upload Lineage", "🛠️ Create DQ Rules", "✅ Upload DQ Rules"])
 tab1, tab2, tab3, tab4 = tabs
 
