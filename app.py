@@ -31,8 +31,8 @@ LINEAGE_URL = st.secrets["LINEAGE_URL"]
 DQ_URL = st.secrets["DQ_URL"]
 LOGO_URL = st.secrets["LOGO_URL"]
 
-# Local save folder (inside Streamlit app folder, not user C drive)
-BASE_SAVE_DIR = os.path.join(os.getcwd(), "Generated_Lineage_Files")
+# Get system Downloads folder
+DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 
 # ========================
 # COMMON FUNCTIONS
@@ -60,8 +60,8 @@ def process_agent(file_content):
 
     payload = {
         "pipeLineId": pipeline_id,
-        "userInputs": {"Program_Files": file_content},
-        "executionId": f"exec-{int(time.time())}",
+        "userInputs": {"{{Program_Files}}": file_content},  # ✅ fixed
+        "executionId": f"exec-{int(time.time())}",      # unique exec ID
         "user": "your.email@ascendion.com"
     }
 
@@ -197,10 +197,10 @@ def create_dq_monitor(SOURCE_ID, row, idx):
         "test_type": "custom_sql",
         "mode": "on_demand",
         "name": row.get("Monitor Name", f"Monitor {idx+1}"),
-        "description": row.get("description", "No description provided."),
+        "description": row.get("Description", "No description provided."),
         "notify": True,
         "incident_level": "info",
-        "custom_sql": row.get("custom_sql", ""),
+        "custom_sql": row.get("Custom_SQL", ""),
     }
     headers = {"X-Decube-Api-Key": API_KEY, "Content-Type": "application/json"}
     response = requests.post(DQ_URL, headers=headers, json=payload, verify=False)
@@ -241,13 +241,13 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-tab1, tab2, tab3 = st.tabs(["📂 Determine Lineage", "🔗 Upload Lineage", "✅ Upload DQ Rules"])
+tab1, tab2, tab3, tab4 = st.tabs(["📂 Determine Lineage", "🔗 Upload Lineage", "🛠️ Create DQ Rules", "✅ Upload DQ Rules"])
 
 # ------------------------
 # TAB 1: Program 1 (Generate Lineage File)
 # ------------------------
 with tab1:
-    st.header("Generate Lineage File")
+    st.header("Determine Lineage")
     program_type = st.selectbox("Select Program Type", ["Stored Procedure", "COBOL"])
     uploaded_file = st.file_uploader("Choose input file", type=["txt", "sql", "cbl", "csv"])
 
@@ -256,34 +256,40 @@ with tab1:
         st.subheader("📄 Input File Preview")
         st.text_area("File Content", content, height=200)
 
+        # ✅ Process button
         if st.button("🚀 Process Agent"):
             with st.spinner("Processing..."):
                 result = process_agent(content)
 
             if result["success"]:
                 st.success(f"✅ Process completed in {result['api_duration']}s")
+
+                # Save results into session_state for persistence
                 st.session_state["lineage_results"] = result["raws"]
                 st.session_state["original_filename"] = os.path.splitext(uploaded_file.name)[0]
                 st.session_state["program_type"] = program_type
             else:
                 st.error("❌ Error while processing")
                 errors = result["error"]
-                st.json(errors)
+                st.json(errors if not (isinstance(errors, dict) and "errors" in errors) else errors["errors"])
 
+    # ✅ Display results if available in session_state
     if "lineage_results" in st.session_state:
         raws = st.session_state["lineage_results"]
         original_filename = st.session_state["original_filename"]
         program_type = st.session_state["program_type"]
 
+        # Setup output dir
+        base_dir = os.path.join(DOWNLOADS_DIR, "Generated_Lineage_Files")
         today_folder = datetime.now().strftime("%Y%m%d")
-        output_dir = os.path.join(BASE_SAVE_DIR, today_folder)
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir = os.path.join(base_dir, today_folder)
 
         for agent, raw_output in raws.items():
             st.subheader(f"🔹 Output Preview - {original_filename}")
             try:
                 df = pd.read_csv(StringIO(raw_output), sep=",", quotechar='"')
 
+                # COBOL table fix
                 if program_type == "COBOL":
                     if "Source Table" in df.columns:
                         df["Source Table"] = df["Source Table"].astype(str).apply(
@@ -296,26 +302,26 @@ with tab1:
 
                 st.dataframe(df, use_container_width=True)
 
-                # Save versioned file when user clicks download
-                version = 1
-                while True:
-                    output_file = os.path.join(output_dir, f"{original_filename}_V{version}.csv")
-                    if not os.path.exists(output_file):
-                        break
-                    version += 1
+                # ✅ Save only when button clicked
+                if st.button(f"⬇️ Download CSV into {output_dir}", key=f"dl_{agent}"):
+                    os.makedirs(output_dir, exist_ok=True)
 
-                csv_data = df.to_csv(index=False)
+                    # ✅ Compute version
+                    version = 1
+                    while True:
+                        output_file = os.path.join(output_dir, f"{original_filename}_V{version}.csv")
+                        if not os.path.exists(output_file):
+                            break
+                        version += 1
 
-                st.download_button(
-                    label=f"⬇️ Download {original_filename}_V{version}.csv",
-                    data=csv_data,
-                    file_name=f"{original_filename}_V{version}.csv",
-                    mime="text/csv"
-                )
+                    df.to_csv(output_file, index=False)
+                    st.success(f"💾 Saved to: {output_file}")
 
-                # also save on server for history
-                with open(output_file, "w", encoding="utf-8") as f:
-                    f.write(csv_data)
+                    # 🔑 Clear session_state → hide preview + button after save
+                    del st.session_state["lineage_results"]
+                    del st.session_state["original_filename"]
+                    del st.session_state["program_type"]
+                    st.rerun()
 
             except Exception as e:
                 st.warning(f"⚠️ Could not parse output as CSV ({e}). Showing raw text instead.")
@@ -325,7 +331,7 @@ with tab1:
 # TAB 2: Program 2 Lineage
 # ------------------------
 with tab2:
-    st.header("Create Lineage")
+    st.header("Upload Lineage")
     sources_dict = get_sources("source", "")
     if sources_dict:
         selected_source_name = st.selectbox("Select Source", options=list(sources_dict.keys()), key="lineage_source")
@@ -386,9 +392,79 @@ with tab2:
                     st.dataframe(pd.DataFrame(results))
 
 # ------------------------
-# TAB 3: Program 2 DQ
+# TAB 3: Create DQ Rules
 # ------------------------
 with tab3:
+    st.header("Create DQ Rules")
+
+    # Upload only .txt or .sql
+    uploaded_file = st.file_uploader("Upload DDL File", type=["txt", "sql"], key="dq_ddl")
+
+    if uploaded_file:
+        content = uploaded_file.read().decode("utf-8")
+        st.subheader("📄 Input File Preview")
+        st.text_area("DDL Content", content, height=200)
+
+        if st.button("🚀 Generate DQ Rules"):
+            with st.spinner("Processing DQ Rules..."):
+                # Hardcoded pipeline ID for DQ rules
+                dq_pipeline_id = 7193   # 🔹 replace with actual pipelineId for DQ workflow
+
+                payload = {
+                    "pipeLineId": dq_pipeline_id,
+                    "userInputs": {"{{DDL_INPUT_FILE}}": content},
+                    "executionId": f"dq-exec-{int(time.time())}",
+                    "user": "samuvel.isaac@ascendion.com"
+                }
+
+                try:
+                    session = create_session()
+                    response = session.post(API_URL_P1, json=payload, timeout=None)
+                    response.raise_for_status()
+                    result = response.json()
+
+                    agents = result.get("pipeline", {}).get("pipeLineAgents", [])
+                    task_outputs = result.get("pipeline", {}).get("tasksOutputs", [])
+
+                    raws = {}
+                    for agent, output in zip(agents, task_outputs):
+                        name = agent["agent"]["name"].strip()
+                        raw_value = output.get("raw", "").strip()
+                        if raw_value:
+                            curated = raw_value.split("\n\n", 1)[0]
+                            raws[name] = curated
+
+                    if raws:
+                        for agent, raw_output in raws.items():
+                            try:
+                                df = pd.read_csv(StringIO(raw_output), sep=",", quotechar='"')
+                                st.subheader(f"🔹 Output Preview - {uploaded_file.name}")
+                                st.dataframe(df, use_container_width=True)
+
+                                # Auto save into Downloads
+                                original_filename = os.path.splitext(uploaded_file.name)[0]
+                                output_file = os.path.join(DOWNLOADS_DIR, f"{original_filename}.csv")
+                                df.to_csv(output_file, index=False)
+
+                                st.success(f"✅ DQ Rules generated and saved to: {output_file}")
+
+                                # 🔽 Direct download link
+                                with open(output_file, "rb") as f:
+                                    b64 = base64.b64encode(f.read()).decode()
+                                    href = f'<a href="data:file/csv;base64,{b64}" download="{original_filename}.csv">⬇️ Download {original_filename}.csv</a>'
+                                    st.markdown(href, unsafe_allow_html=True)
+
+                            except Exception as e:
+                                st.warning(f"⚠️ Could not parse API output as CSV ({e}). Showing raw text instead.")
+                                st.text_area(f"{agent} raw", raw_output, height=200)
+
+                except Exception as e:
+                    st.error(f"❌ Failed to generate DQ rules: {e}")
+
+# ------------------------
+# TAB 4: Program 2 DQ
+# ------------------------
+with tab4:
     st.header("Upload DQ Rules")
     sources_dict = get_sources("source", "")
     if sources_dict:
@@ -427,4 +503,3 @@ with tab3:
 
                 st.subheader("✅ Monitor Creation Results")
                 st.dataframe(pd.DataFrame(results), use_container_width=True)
-
