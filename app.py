@@ -241,7 +241,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-tab1, tab2, tab3 = st.tabs(["📂 Generate Lineage File", "🔗 Create Lineage", "✅ Create DQ Rule"])
+tab1, tab2, tab3 = st.tabs(["📂 Determine Lineage", "🔗 Upload Lineage", "✅ Upload DQ Rules"])
 
 # ------------------------
 # TAB 1: Program 1 (Generate Lineage File)
@@ -389,21 +389,42 @@ with tab2:
 # TAB 3: Program 2 DQ
 # ------------------------
 with tab3:
-    st.header("Create DQ Rule")
+    st.header("Upload DQ Rules")
     sources_dict = get_sources("source", "")
     if sources_dict:
-        selected_source_name = st.selectbox("Select Source", options=list(sources_dict.keys()), key="dq_source")
+        selected_source_name = st.selectbox(
+            "Select Source",
+            options=list(sources_dict.keys()),
+            key="dq_source"
+        )
         SOURCE_ID = sources_dict[selected_source_name]
-        uploaded_file = st.file_uploader("Upload DQ Details (CSV)", type=["csv"], key="dq_file")
+
+        # Accept both CSV and TXT
+        uploaded_file = st.file_uploader(
+            "Upload DQ Details (CSV or TXT)", 
+            type=["csv", "txt"], 
+            key="dq_file"
+        )
+
         if uploaded_file:
-            df = pd.read_csv(uploaded_file)
-            st.subheader("Input Data Preview")
-            st.dataframe(df)
+            # ✅ Handle TXT (comma-separated, optional double quotes) the same as CSV
+            df = pd.read_csv(
+                uploaded_file,
+                sep=",",
+                quotechar='"',
+                skip_blank_lines=True,
+                on_bad_lines="skip"
+            )
+
+            st.subheader("📄 Input Data Preview")
+            st.dataframe(df, use_container_width=True)
+
             if st.button("🚀 Process DQ Creation"):
                 results = []
                 with st.spinner("Processing..."):
                     for idx, row in df.iterrows():
                         results.append(create_dq_monitor(SOURCE_ID, row, idx))
-                st.subheader("Monitor Creation Results")
-                st.dataframe(pd.DataFrame(results))
+
+                st.subheader("✅ Monitor Creation Results")
+                st.dataframe(pd.DataFrame(results), use_container_width=True)
 
