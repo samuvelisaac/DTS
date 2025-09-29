@@ -435,38 +435,39 @@ with tab3:
         if st.button("🚀 Generate DQ Rules from DDL"):
             dq_pipeline_id = 7193
             payload = {"pipeLineId": dq_pipeline_id, "userInputs": {"{{DDL_INPUT_FILE}}": ddl_content}, "executionId": f"dq-exec-{int(time.time())}", "user": "samuvel.isaac@ascendion.com"}
-            try:
-                sess = create_session_p1()
-                r = sess.post(API_URL_P1, json=payload, timeout=None)
-                r.raise_for_status()
-                out = r.json()
-                agents = out.get("pipeline", {}).get("pipeLineAgents", [])
-                tasks = out.get("pipeline", {}).get("tasksOutputs", [])
-                raws = {}
-                for agent, t in zip(agents, tasks):
-                    nm = agent.get("agent", {}).get("name", "agent").strip()
-                    rv = t.get("raw", "")
-                    if rv:
-                        raws[nm] = rv.split("\n\n", 1)[0]
-                if not raws:
-                    st.warning("No output produced by pipeline.")
-                for nm, raw in raws.items():
-                    st.subheader(f"Output - {os.path.splitext(uploaded_ddl.name)[0]}")
-                    # try parse csv
-                    try:
-                        df = pd.read_csv(StringIO(raw), sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
-                        st.dataframe(df, use_container_width=True)
-                        csv_bytes = df.to_csv(index=False).encode("utf-8")
-                        # local save (Downloads) and download button
-                        saved, path = safe_save_csv_bytes(csv_bytes, f"{os.path.splitext(uploaded_ddl.name)[0]}.csv")
-                        if saved:
-                            st.info(f"Saved locally to: {path}")
-                        st.download_button(f"⬇️ Download {os.path.splitext(uploaded_ddl.name)[0]}.csv", data=csv_bytes, file_name=f"{os.path.splitext(uploaded_ddl.name)[0]}.csv", mime="text/csv")
-                    except Exception as e:
-                        st.warning(f"Could not parse pipeline output as CSV: {e}")
-                        st.text_area(f"{nm} raw", raw, height=200)
-            except Exception as e:
-                st.error(f"Failed to call DQ pipeline: {e}")
+            with st.spinner("Calling AVA pipeline..."):
+                try:
+                    sess = create_session_p1()
+                    r = sess.post(API_URL_P1, json=payload, timeout=None)
+                    r.raise_for_status()
+                    out = r.json()
+                    agents = out.get("pipeline", {}).get("pipeLineAgents", [])
+                    tasks = out.get("pipeline", {}).get("tasksOutputs", [])
+                    raws = {}
+                    for agent, t in zip(agents, tasks):
+                        nm = agent.get("agent", {}).get("name", "agent").strip()
+                        rv = t.get("raw", "")
+                        if rv:
+                            raws[nm] = rv.split("\n\n", 1)[0]
+                    if not raws:
+                        st.warning("No output produced by pipeline.")
+                    for nm, raw in raws.items():
+                        st.subheader(f"Output - {os.path.splitext(uploaded_ddl.name)[0]}")
+                        # try parse csv
+                        try:
+                            df = pd.read_csv(StringIO(raw), sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
+                            st.dataframe(df, use_container_width=True)
+                            csv_bytes = df.to_csv(index=False).encode("utf-8")
+                            # local save (Downloads) and download button
+                            saved, path = safe_save_csv_bytes(csv_bytes, f"{os.path.splitext(uploaded_ddl.name)[0]}.csv")
+                            if saved:
+                                st.info(f"Saved locally to: {path}")
+                            st.download_button(f"⬇️ Download {os.path.splitext(uploaded_ddl.name)[0]}.csv", data=csv_bytes, file_name=f"{os.path.splitext(uploaded_ddl.name)[0]}.csv", mime="text/csv")
+                        except Exception as e:
+                            st.warning(f"Could not parse pipeline output as CSV: {e}")
+                            st.text_area(f"{nm} raw", raw, height=200)
+                except Exception as e:
+                    st.error(f"Failed to call DQ pipeline: {e}")
 
 # ------------------------
 # TAB 4: Upload DQ Rules (CSV/TXT) -> create monitors
