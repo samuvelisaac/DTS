@@ -213,6 +213,16 @@ def create_dq_monitor(SOURCE_ID, row, idx):
 # ========================
 # STREAMLIT APP
 # ========================
+hide_streamlit_style = """
+    <style>
+    /* Hide top-right processing spinner and stop button */
+    .stStatusWidget, .st-emotion-cache-13ln4jf {
+        display: none !important;
+    }
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 st.set_page_config(page_title="AAVA DTS Tools", layout="wide")
 
 LOGO_BASE64 = get_base64_image(LOGO_URL)
@@ -396,3 +406,4 @@ with tab3:
                         results.append(create_dq_monitor(SOURCE_ID, row, idx))
                 st.subheader("Monitor Creation Results")
                 st.dataframe(pd.DataFrame(results))
+
