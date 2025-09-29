@@ -35,7 +35,7 @@ def get_secret(name: str, default=""):
 # Program 1 (pipeline that generates lineage CSV from program file)
 API_KEY_P1 = get_secret("API_KEY_P1")
 API_URL_P1 = get_secret("API_URL_P1")
-WORKFLOW = {"name": "TSB_Data_Lineage_Generator_WF", "pipelineId": int(get_secret("WORKFLOW_PIPELINE_ID", "7024"))}
+WORKFLOW = {"name": "TSB_Data_Lineage_Generator_WF", "pipelineId": 7024}
 
 # Program 2 (Decube/AVA APIs)
 API_KEY = get_secret("API_KEY")
@@ -135,7 +135,7 @@ def process_agent(file_content: str):
         "pipeLineId": pipeline_id,
         "userInputs": {"{{Program_Files}}": file_content},
         "executionId": f"exec-{int(time.time())}",
-        "user": get_secret("DEFAULT_USER", "automaton@ascendion.com")
+        "user": "samuvel.isaac@ascendion.com"
     }
     try:
         session = create_session_p1()
@@ -433,8 +433,8 @@ with tab3:
         st.subheader("DDL Preview")
         st.text_area("DDL", ddl_content, height=240)
         if st.button("🚀 Generate DQ Rules from DDL"):
-            dq_pipeline_id = int(get_secret("DQ_PIPELINE_ID", "7193"))
-            payload = {"pipeLineId": dq_pipeline_id, "userInputs": {"{{DDL_INPUT_FILE}}": ddl_content}, "executionId": f"dq-exec-{int(time.time())}", "user": get_secret("DEFAULT_USER", "user@ascendion.com")}
+            dq_pipeline_id = 7193
+            payload = {"pipeLineId": dq_pipeline_id, "userInputs": {"{{DDL_INPUT_FILE}}": ddl_content}, "executionId": f"dq-exec-{int(time.time())}", "user": "samuvel.isaac@ascendion.com"}
             try:
                 sess = create_session_p1()
                 r = sess.post(API_URL_P1, json=payload, timeout=None)
@@ -451,17 +451,17 @@ with tab3:
                 if not raws:
                     st.warning("No output produced by pipeline.")
                 for nm, raw in raws.items():
-                    st.subheader(f"Output - {nm}")
+                    st.subheader(f"Output - {os.path.splitext(uploaded_ddl.name)[0]}")
                     # try parse csv
                     try:
                         df = pd.read_csv(StringIO(raw), sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
                         st.dataframe(df, use_container_width=True)
                         csv_bytes = df.to_csv(index=False).encode("utf-8")
                         # local save (Downloads) and download button
-                        saved, path = safe_save_csv_bytes(csv_bytes, f"{os.path.splitext(uploaded_ddl.name)[0]}_{nm}.csv")
+                        saved, path = safe_save_csv_bytes(csv_bytes, f"{os.path.splitext(uploaded_ddl.name)[0]}.csv")
                         if saved:
                             st.info(f"Saved locally to: {path}")
-                        st.download_button(f"⬇️ Download {os.path.splitext(uploaded_ddl.name)[0]}_{nm}.csv", data=csv_bytes, file_name=f"{os.path.splitext(uploaded_ddl.name)[0]}_{nm}.csv", mime="text/csv")
+                        st.download_button(f"⬇️ Download {os.path.splitext(uploaded_ddl.name)[0]}.csv", data=csv_bytes, file_name=f"{os.path.splitext(uploaded_ddl.name)[0]}.csv", mime="text/csv")
                     except Exception as e:
                         st.warning(f"Could not parse pipeline output as CSV: {e}")
                         st.text_area(f"{nm} raw", raw, height=200)
