@@ -444,7 +444,7 @@ with tab3:
                                 # Auto save into Downloads
                                 original_filename = os.path.splitext(uploaded_file.name)[0]
                                 output_file = os.path.join(DOWNLOADS_DIR, f"{original_filename}.csv")
-                                df.to_csv(output_file, index=False)
+#                                df.to_csv(output_file, index=False)
 
                                 st.success(f"✅ DQ Rules generated and saved to: {output_file}")
 
@@ -503,3 +503,4 @@ with tab4:
 
                 st.subheader("✅ Monitor Creation Results")
                 st.dataframe(pd.DataFrame(results), use_container_width=True)
+
