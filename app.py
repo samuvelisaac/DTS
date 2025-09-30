@@ -13,7 +13,6 @@ import pandas as pd
 import requests
 import httpx
 import urllib3
-from streamlit_javascript import st_javascript
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -574,3 +573,4 @@ with tab4:
                     if saved:
                         st.info(f"Saved locally to: {path}")
                     st.download_button("⬇️ Download DQ_Monitors_Results.csv", data=csv_bytes, file_name="DQ_Monitors_Results.csv", mime="text/csv")
+
