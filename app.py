@@ -13,6 +13,7 @@ import pandas as pd
 import requests
 import httpx
 import urllib3
+from streamlit_javascript import st_javascript
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -204,12 +205,16 @@ def find_dataset_and_column(source_id, collection_id, table_name, column_name):
         if len(parents) > 1 and parents[0]["id"] == source_id and parents[1]["id"] == collection_id:
             dataset_id = d["asset"]["id"]
             break
+    
+    # We must search for the column under the dataset's parents
     columns = search_asset(column_name, parent_id=source_id, parent_type="source")
-    if not columns:
+    if not columns or not dataset_id:
         return dataset_id, None
+        
     column_id = None
     for c in columns:
         parents = c.get("parents", [])
+        # Check if the column's parents match the hierarchy: source -> collection -> dataset
         if len(parents) > 2 and parents[0]["id"] == source_id and parents[1]["id"] == collection_id and parents[2]["id"] == dataset_id:
             column_id = c["asset"]["id"]
             break
@@ -226,7 +231,7 @@ def update_asset_desc(asset_id, description):
 def create_lineage(src_column_id, trg_column_id):
     payload = {"source": {"id": src_column_id, "type": "property"}, "target": {"id": trg_column_id, "type": "property"}, "data_job": None}
     res = requests.post(LINEAGE_URL, headers={"X-Decube-Api-Key": API_KEY, "Content-Type": "application/json"},
-                        data=json.dumps(payload), verify=False, timeout=20)
+                         data=json.dumps(payload), verify=False, timeout=20)
     if res.status_code != 200:
         return {"error": res.text}
     try:
@@ -246,7 +251,7 @@ def create_dq_monitor(SOURCE_ID, row, idx):
         "custom_sql": row.get("Custom_SQL", "")
     }
     res = requests.post(DQ_URL, headers={"X-Decube-Api-Key": API_KEY, "Content-Type": "application/json"},
-                        json=payload, verify=False, timeout=20)
+                         json=payload, verify=False, timeout=20)
     return {"Monitor Name": payload["name"], "Status": "✅ Created" if res.status_code == 200 else f"❌ Failed ({res.status_code})", "Response": res.text}
 
 # ---------------------------
@@ -260,53 +265,84 @@ hide_streamlit_style = """
     }
     </style>
 """
-
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.set_page_config(page_title="AAVA DTS Ally", layout="wide")
 
 LOGO_BASE64 = get_base64_image(LOGO_URL)
+
 if LOGO_BASE64:
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div style="flex:1"><img src="data:image/png;base64,{LOGO_BASE64}" width="60"></div>
-      <div style="flex:2;text-align:center"><h1>AAVA DTS Ally</h1></div>
-      <div style="flex:1"></div>
-    </div>
-    """, unsafe_allow_html=True)
+    LOGO_HTML = f'<img src="data:image/png;base64,{LOGO_BASE64}" width="48" style="margin-right:10px;"/>'
+    header_height_px = 75
 else:
-    st.title("AAVA DTS Ally")
+    LOGO_HTML = '<div style="font-weight:bold;font-size:20px;margin-right:10px;">A</div>'
+    header_height_px = 65
 
-# Add this right after you set up your logo/title and before `st.tabs(...)`
+TITLE_HTML = '<h2 style="margin:0;">AAVA DTS Ally</h2>'
 
+# -------------------
+# CSS Frozen Header
+# -------------------
 st.markdown(
-    """
+    f"""
     <style>
-    /* Freeze the top logo, title and tab section */
-    .freeze-header {
-        position: sticky;
-        top: 0;
-        z-index: 999;
-        background-color: white; /* match app background */
-        padding-bottom: 5px;
+    /* Fixed custom header */
+    .fixed-header {{
+        position: fixed;
+        top: 50px; /* below Streamlit toolbar */
+        left: 0; right: 0;
+        z-index: 1000;
+        background: white;
         border-bottom: 1px solid #ddd;
-    }
+        padding: 8px 16px;
+    }}
+    .header-content {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }}
+    /* push content below header + tabs */
+    .block-container {{
+        padding-top: {header_height_px + 50}px !important;
+    }}
     </style>
+
+    <div class="fixed-header">
+        <div class="header-content">
+            <div style="flex:1;text-align:left;">{LOGO_HTML}</div>
+            <div style="flex:2;text-align:center;">{TITLE_HTML}</div>
+            <div style="flex:1;text-align:right;"></div>
+        </div>
+    </div>
     """,
     unsafe_allow_html=True
 )
 
-# Wrap logo/title + tabs inside the freeze-header div
-st.markdown('<div class="freeze-header">', unsafe_allow_html=True)
-
-tabs = st.tabs(["📂 Determine Lineage", "🔗 Upload Lineage", "🛠️ Create DQ Rules", "✅ Upload DQ Rules"])
-tab1, tab2, tab3, tab4 = tabs
+# ---------------------------
+# Real Streamlit Tabs (sticky by CSS)
+# ---------------------------
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📂 Determine Lineage",
+    "🔗 Upload Lineage",
+    "🛠️ Create DQ Rules",
+    "✅ Upload DQ Rules"
+])
 
 # ------------------------
 # TAB 1: Determine Lineage (Program1)
 # ------------------------
 with tab1:
     st.header("Determine Lineage")
+
+    # Initialize session state variables if they don't exist
+    if "lineage_raws" not in st.session_state:
+        st.session_state["lineage_raws"] = None
+    if "lineage_original_filename" not in st.session_state:
+        st.session_state["lineage_original_filename"] = None
+    if "lineage_program_type" not in st.session_state:
+        st.session_state["lineage_program_type"] = None
+
+
     program_type = st.selectbox("Select Program Type", ["Stored Procedure", "COBOL"])
     uploaded_file = st.file_uploader("Upload Program File", type=["txt", "sql", "cbl", "csv"], key="progfile")
 
@@ -376,9 +412,6 @@ with tab1:
                 key=f"dl_prog_{agent_name}"
             )
 
-            # hide preview after download if user clicked - we can't detect click programmatically beyond rerun,
-            # but we do offer the download button and local save already.
-
 # ------------------------
 # TAB 2: Upload Lineage (Program2 lineage creation)
 # ------------------------
@@ -424,9 +457,14 @@ with tab2:
                                 src_column = str(row.get("Source Column", "")).strip()
                                 trg_table = str(row.get("Target Table", "")).strip()
                                 trg_column = str(row.get("Target Column", "")).strip()
-                                desc_line = ",".join([f"\"{row[col]}\"" if "," in str(row[col]) else str(row[col]) for col in df.columns])
+                                
+                                # Construct the description line by joining all columns, safely handling commas in data
+                                desc_line = ",".join([f"\"{str(row[col]).replace('"', '""')}\"" if "," in str(row[col]) or '"' in str(row[col]) else str(row[col]) for col in df.columns])
+                                
+                                # Search for assets
                                 _, src_col_id = find_dataset_and_column(SOURCE_ID, COLLECTION_ID, src_table, src_column)
                                 _, trg_col_id = find_dataset_and_column(SOURCE_ID, COLLECTION_ID, trg_table, trg_column)
+                                
                                 if src_col_id and trg_col_id:
                                     src_update = update_asset_desc(src_col_id, desc_line)
                                     trg_update = update_asset_desc(trg_col_id, desc_line)
@@ -434,6 +472,7 @@ with tab2:
                                     results.append({"Source Table": src_table, "Source Column": src_column, "Target Table": trg_table, "Target Column": trg_column, "Source Col ID": src_col_id, "Target Col ID": trg_col_id, "Source Desc Update": src_update, "Target Desc Update": trg_update, "Lineage Response": lineage_response})
                                 else:
                                     results.append({"Source Table": src_table, "Source Column": src_column, "Target Table": trg_table, "Target Column": trg_column, "Source Col ID": src_col_id, "Target Col ID": trg_col_id, "Source Desc Update": "⚠️ Not found", "Target Desc Update": "⚠️ Not found", "Lineage Response": "⚠️ Skipped"})
+                        
                         res_df = pd.DataFrame(results)
                         st.subheader("✅ Lineage Results")
                         st.dataframe(res_df, use_container_width=True)
@@ -471,8 +510,10 @@ with tab3:
                         rv = t.get("raw", "")
                         if rv:
                             raws[nm] = rv.split("\n\n", 1)[0]
+                    
                     if not raws:
                         st.warning("No output produced by pipeline.")
+                    
                     for nm, raw in raws.items():
                         st.subheader(f"Output - {os.path.splitext(uploaded_ddl.name)[0]}")
                         # try parse csv
@@ -488,6 +529,13 @@ with tab3:
                         except Exception as e:
                             st.warning(f"Could not parse pipeline output as CSV: {e}")
                             st.text_area(f"{nm} raw", raw, height=200)
+                except httpx.HTTPStatusError as e:
+                    try:
+                        err = r.json()
+                    except Exception:
+                        err = {"error": str(e)}
+                    st.error("❌ Processing failed.")
+                    st.json(err)
                 except Exception as e:
                     st.error(f"Failed to call DQ pipeline: {e}")
 
@@ -505,6 +553,7 @@ with tab4:
         up = st.file_uploader("Upload DQ rules (CSV or TXT)", type=["csv", "txt"], key="dq_upload")
         if up:
             try:
+                # Use ',' as default separator for simplicity here, assuming input is always CSV
                 df = pd.read_csv(up, sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
             except Exception as e:
                 st.error(f"Failed to parse file: {e}")
