@@ -1,0 +1,393 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID.  CUSTVSAM2DB2.
+       AUTHOR.      RETAIL BANK DATA TEAM.
+       DATE-WRITTEN.2022-09-16.
+       REMARKS.
+           Customer records from a VSAM KSDS into DB2 table "DB2_Customer_Data".
+       * --------------------------------------------------------------------
+       * Change History
+       * --------------------------------------------------------------------
+       * 2022-09-16  v1.0  Initial production delivery.
+       * 2023-10-01  v1.1  Added reject-file output and configurable commit interval.
+       * 2022-11-05  v1.2  Improved email validation, added audit counters and enhanced logging.
+       * --------------------------------------------------------------------
+
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SOURCE-COMPUTER. IBM-MAINFRAME.
+       OBJECT-COMPUTER. IBM-MAINFRAME.
+
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           * VSAM KSDS input (replace DSNAME via JCL DDNAME)
+           SELECT VSAM_Customer_Data
+               ASSIGN TO VSAM-DSN
+               ORGANIZATION IS INDEXED
+               ACCESS MODE IS SEQUENTIAL
+               FILE STATUS IS WS-FS-VSAM
+               RECORD KEY IS VSAM-KEY.
+
+           * Reject output (sequential dataset)
+           SELECT REJECT-OUT
+               ASSIGN TO REJ-OUT-DSN
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-FS-REJ.
+
+       DATA DIVISION.
+       FILE SECTION.
+
+       FD  VSAM_Customer_Data
+           RECORD CONTAINS 400 CHAR
+           BLOCK CONTAINS 0 CHAR
+           LABEL RECORDS ARE STANDARD.
+       01  VSAM-REC.
+           05  FULL_NAME        PIC X(100).
+           05  DOB              PIC X(8).     *> Expect YYYYMMDD
+           05  GENDER           PIC X(10).
+           05  ADDRESS          PIC X(120).
+           05  PHONE            PIC X(20).
+           05  EMAIL            PIC X(100).
+           05  NATID            PIC X(50).
+           05  OCCUPATION       PIC X(50).
+           05  CUSTTYPE         PIC X(50).
+           05  ACCNUMS          PIC X(100).
+           05  FILLER           PIC X( - ).
+
+       FD  REJECT-OUT
+           RECORD CONTAINS 320 CHAR
+           BLOCK CONTAINS 0
+           LABEL RECORDS ARE STANDARD.
+       01  REJ-REC                 PIC X(320).
+
+       WORKING-STORAGE SECTION.
+
+       *-----------------------------
+       * Configuration / Constants
+       *-----------------------------
+       77  CFG-COMMIT-INTERVAL      PIC 9(4)      VALUE 100.
+       77  CFG-MIN-AGE              PIC 9(3)      VALUE 18.
+       77  CFG-LOG-REJECTS          PIC X          VALUE 'Y'. *> 'Y' to write rejects
+       77  CFG-DB-TABLE-NAME        PIC X(64)     VALUE '"DB2_Customer_Data"'.
+
+       *-----------------------------
+       * File status & control
+       *-----------------------------
+       77  WS-FS-VSAM               PIC XX.
+       77  WS-FS-REJ                PIC XX.
+       77  WS-EOF                   PIC X          VALUE 'N'.
+       77  WS-REC-COUNT             PIC 9(9)       VALUE 0.
+       77  WS-ERR-COUNT             PIC 9(9)       VALUE 0.
+       77  WS-LOAD-START-TIME       PIC X(20).
+
+       *-----------------------------
+       * Host variables for DB2
+       *-----------------------------
+       01  HV-REC.
+           05 HV-FULL_NAME          PIC X(100).
+           05 HV-DOB-STR            PIC X(10).   *> 'YYYY-MM-DD'
+           05 HV-GENDER             PIC X(10).
+           05 HV-ADDRESS            PIC X(120).
+           05 HV-PHONE              PIC X(20).
+           05 HV-EMAIL              PIC X(100).
+           05 HV-NATID              PIC X(50).
+           05 HV-OCCUPATION         PIC X(50).
+           05 HV-CUSTTYPE           PIC X(50).
+           05 HV-ACCNUMS            PIC X(100).
+           05 HV-AGE                PIC 9(3).
+
+       *-----------------------------
+       * Date / age calculation helpers
+       *-----------------------------
+       77  WS-CUR-DATE              PIC X(8).
+       77  WS-CUR-YEAR              PIC 9(4).
+       77  WS-CUR-MONTH             PIC 9(2).
+       77  WS-CUR-DAY               PIC 9(2).
+       77  WS-TEMP-Y                PIC 9(4).
+       77  WS-EMAIL-VALID-FLAG      PIC X          VALUE 'N'.
+       77  WS-MASKED-NATID          PIC X(50).
+
+       * SQL communications area (DB2)
+       EXEC SQL
+           INCLUDE SQLCA
+       END-EXEC.
+
+       PROCEDURE DIVISION.
+       MAIN.
+           PERFORM INITIALISE.
+           PERFORM OPEN-FILES.
+           PERFORM PROCESS-LOOP UNTIL WS-EOF = 'Y'.
+           PERFORM CLEANUP.
+           GOBACK.
+
+       *-----------------------------------------------------------------
+       * INITIALISE - prepare runtime environment and derive current date
+       *-----------------------------------------------------------------
+       INITIALISE.
+           *> Accept current date (YYYYMMDD)
+           ACCEPT WS-CUR-DATE FROM DATE.
+           MOVE FUNCTION NUMVAL (WS-CUR-DATE (1:4)) TO WS-CUR-YEAR.
+           MOVE FUNCTION NUMVAL (WS-CUR-DATE (5:2)) TO WS-CUR-MONTH.
+           MOVE FUNCTION NUMVAL (WS-CUR-DATE (7:2)) TO WS-CUR-DAY.
+
+           *> Initialize audit start time (simple displayable value)
+           MOVE WS-CUR-DATE TO WS-LOAD-START-TIME.
+
+           *> Initialize DB2 environment assumed to be handled via job context (no credentials here).
+
+       *-----------------------------------------------------------------
+       * OPEN-FILES
+       *-----------------------------------------------------------------
+       OPEN-FILES.
+           OPEN INPUT VSAM_Customer_Data
+           IF WS-FS-VSAM NOT = '00'
+               DISPLAY 'ERROR: VSAM OPEN FILE STATUS=' WS-FS-VSAM
+               PERFORM ABEND-PROCEDURE
+           END-IF.
+
+           IF CFG-LOG-REJECTS = 'Y'
+               OPEN OUTPUT REJECT-OUT
+               IF WS-FS-REJ NOT = '00'
+                   DISPLAY 'ERROR: REJECT FILE OPEN STATUS=' WS-FS-REJ
+                   PERFORM ABEND-PROCEDURE
+               END-IF
+           END-IF.
+
+       *-----------------------------------------------------------------
+       * PROCESS-LOOP - Read VSAM and handle each record
+       *-----------------------------------------------------------------
+       PROCESS-LOOP.
+           READ VSAM_Customer_Data
+               AT END
+                   MOVE 'Y' TO WS-EOF
+               NOT AT END
+                   PERFORM PROCESS-ONE-RECORD
+           END-READ.
+
+       PROCESS-ONE-RECORD.
+           ADD 1 TO WS-REC-COUNT.
+
+           *> Normalise and trim input fields
+           PERFORM NORMALISE-FIELDS.
+
+           *> Parse DOB and calculate age
+           PERFORM PARSE-DOB.
+
+           *> Validation: email, phone, mandatory fields
+           PERFORM VALIDATE-RECORD.
+
+           IF WS-EMAIL-VALID-FLAG = 'N'
+               DISPLAY 'REJECT: Invalid email for record=' WS-REC-COUNT ' email=' HV-EMAIL
+               PERFORM HANDLE-REJECT USING 'Invalid email'
+               GO TO PROCESS-EXIT
+           END-IF.
+
+           IF HV-AGE < CFG-MIN-AGE
+               DISPLAY 'REJECT: Underage customer (age=' HV-AGE ') record=' WS-REC-COUNT
+               PERFORM HANDLE-REJECT USING 'Underage'
+               GO TO PROCESS-EXIT
+           END-IF.
+
+           *> Derive Customer Type if blank or generic
+           IF FUNCTION TRIM(HV-CUSTTYPE) = SPACES
+               PERFORM DERIVE-CUSTOMER-TYPE
+           END-IF.
+
+           *> Mask NATID for logging only
+           PERFORM MASK-NATID.
+
+           *> Insert into DB2 table using embedded SQL
+           EXEC SQL
+               INSERT INTO "DB2_Customer_Data"
+                 ("FULL_NAME","DATE_OF_BIRTH","GENDER","ADDRESS","PHONE_NUMBER",
+                  "EMAIL_ADDRESS","NATID","OCCUPATION",
+                  "CUSTOMER_TYPE","ACCOUNT_NUMBERS","AGE")
+               VALUES(:HV-FULL_NAME,
+                      :HV-DOB_STR,
+                      :HV-GENDER,
+                      :HV-ADDRESS,
+                      :HV-PHONE,
+                      :HV-EMAIL,
+                      :HV-NATID,
+                      :HV-OCCUPATION,
+                      :HV-CUSTTYPE,
+                      :HV-ACCNUMS,
+                      :HV-AGE)
+           END-EXEC.
+
+           IF SQLCODE = 0
+               *> success; optionally log minimal info
+               CONTINUE
+           ELSE
+               DISPLAY 'DB2 INSERT FAILED SQLCODE=' SQLCODE ' SQLSTATE=' SQLSTATE
+               PERFORM HANDLE-REJECT USING 'DB2 insert failed'
+           END-IF.
+
+           *> Commit periodically to control transaction size
+           IF WS-REC-COUNT MOD CFG-COMMIT-INTERVAL = 0
+               EXEC SQL COMMIT END-EXEC
+               IF SQLCODE NOT = 0
+                   DISPLAY 'COMMIT FAILED SQLCODE=' SQLCODE
+                   PERFORM ABEND-PROCEDURE
+               END-IF
+           END-IF.
+
+       PROCESS-EXIT.
+           .
+
+       *-----------------------------------------------------------------
+       * NORMALISE-FIELDS - trim and move fields into host variables
+       *-----------------------------------------------------------------
+       NORMALISE-FIELDS.
+           MOVE FUNCTION TRIM(FULL_NAME)  TO HV-FULL_NAME.
+           MOVE FUNCTION TRIM(DOB)        TO DOB.
+           MOVE FUNCTION TRIM(GENDER)     TO HV-GENDER.
+           MOVE FUNCTION TRIM(ADDRESS)    TO HV-ADDRESS.
+           MOVE FUNCTION TRIM(PHONE)      TO HV-PHONE.
+           MOVE FUNCTION TRIM(EMAIL)      TO HV-EMAIL.
+           MOVE FUNCTION TRIM(NATID)      TO HV-NATID.
+           MOVE FUNCTION TRIM(OCCUPATION) TO HV-OCCUPATION.
+           MOVE FUNCTION TRIM(CUSTTYPE)   TO HV-CUSTTYPE.
+           MOVE FUNCTION TRIM(ACCNUMS)    TO HV-ACCNUMS.
+           .
+
+       *-----------------------------------------------------------------
+       * PARSE-DOB - expects YYYYMMDD in DOB; produces HV-DOB-STR and HV-AGE
+       *-----------------------------------------------------------------
+       PARSE-DOB.
+           IF FUNCTION TRIM(DOB) = SPACES OR FUNCTION LENGTH(FUNCTION TRIM(DOB)) < 8
+               MOVE 0 TO HV-AGE
+               MOVE SPACES TO HV-DOB-STR
+               EXIT PARAGRAPH
+           END-IF.
+
+           *> Compute age
+           COMPUTE WS-TEMP-Y = WS-CUR-YEAR - FUNCTION NUMVAL(DOB(1:4)).
+           IF (FUNCTION NUMVAL(DOB(5:2)) > WS-CUR-MONTH)
+               OR (FUNCTION NUMVAL(DOB(5:2)) = WS-CUR-MONTH
+                   AND FUNCTION NUMVAL(DOB(7:2)) > WS-CUR-DAY)
+               COMPUTE HV-AGE = WS-TEMP-Y - 1
+           ELSE
+               COMPUTE HV-AGE = WS-TEMP-Y
+           END-IF.
+
+           *> Format DOB as YYYY-MM-DD for DB2
+           STRING DOB(1:4) '-' DOB(5:2) '-' DOB(7:2)
+               DELIMITED BY SIZE
+               INTO HV-DOB-STR
+           .
+
+       *-----------------------------------------------------------------
+       * VALIDATE-RECORD - basic validation checks
+       *-----------------------------------------------------------------
+       VALIDATE-RECORD.
+           *> Email: simple check - presence of single '@', at least one '.' after '@'
+           MOVE 'N' TO WS-EMAIL-VALID-FLAG.
+           IF HV-EMAIL NOT = SPACES
+               IF FUNCTION INDEX(HV-EMAIL, '@') > 1
+                   IF FUNCTION INDEX(HV-EMAIL, '.', FUNCTION INDEX(HV-EMAIL, '@')) > 0
+                       MOVE 'Y' TO WS-EMAIL-VALID-FLAG
+                   END-IF
+               END-IF
+           END-IF.
+
+           *> Additional validations (phone format, mandatory name) can be added here.
+           IF FUNCTION TRIM(HV-FULL_NAME) = SPACES
+               PERFORM HANDLE-REJECT USING 'Missing full name'
+           END-IF.
+
+       *-----------------------------------------------------------------
+       * DERIVE-CUSTOMER-TYPE - business rule mapping
+       *-----------------------------------------------------------------
+       DERIVE-CUSTOMER-TYPE.
+           IF HV-AGE >= 65
+               MOVE 'Senior' TO HV-CUSTTYPE
+           ELSE IF HV-AGE >= 25 AND HV-AGE < 65
+               IF FUNCTION INSPECT(HV-OCCUPATION TALLYING FOR 'RETIRED') > 0
+                   MOVE 'Senior' TO HV-CUSTTYPE
+               ELSE
+                   MOVE 'Adult' TO HV-CUSTTYPE
+               END-IF
+           ELSE
+               MOVE 'Youth' TO HV-CUSTTYPE
+           END-IF.
+
+       *-----------------------------------------------------------------
+       * MASK-NATID - mask all but last 4 chars for logs
+       *-----------------------------------------------------------------
+       MASK-NATID.
+           IF FUNCTION TRIM(HV-NATID) = SPACES
+               MOVE 'N/A' TO WS-MASKED-NATID
+           ELSE
+               IF FUNCTION LENGTH(FUNCTION TRIM(HV-NATID)) <= 4
+                   MOVE '****' TO WS-MASKED-NATID
+               ELSE
+                   STRING '****' DELIMITED BY SIZE
+                          HV-NATID ( FUNCTION LENGTH(FUNCTION TRIM(HV-NATID)) - 3 : 4 )
+                          DELIMITED BY SIZE
+                          INTO WS-MASKED-NATID
+               END-IF
+           END-IF.
+
+       *-----------------------------------------------------------------
+       * HANDLE-REJECT - write a human-readable reject record to REJECT-OUT
+       *   using the reason passed in
+       *-----------------------------------------------------------------
+       HANDLE-REJECT USING REJ-REASON.
+       01  REJ-REASON               PIC X(60).
+           ADD 1 TO WS-ERR-COUNT.
+           IF CFG-LOG-REJECTS = 'Y'
+               MOVE FUNCTION TRIM(HV-FULL_NAME) TO REJ-REC(1:100)
+               MOVE '|' TO REJ-REC(101:1)
+               MOVE FUNCTION TRIM(HV-EMAIL) TO REJ-REC(102:100)
+               MOVE '|' TO REJ-REC(202:1)
+               MOVE FUNCTION TRIM(HV-NATID) TO REJ-REC(203:50)
+               MOVE '|' TO REJ-REC(253:1)
+               MOVE FUNCTION TRIM(REJ-REASON) TO REJ-REC(254:60)
+               WRITE REJ-REC
+                   AT END
+                       DISPLAY 'ERROR: failed to write reject record'
+               END-WRITE
+           END-IF.
+           .
+
+       *-----------------------------------------------------------------
+       * CLEANUP - close files, final commit and log summary
+       *-----------------------------------------------------------------
+       CLEANUP.
+           IF WS-REC-COUNT > 0
+               EXEC SQL COMMIT END-EXEC
+               IF SQLCODE NOT = 0
+                   DISPLAY 'FINAL COMMIT FAILED SQLCODE=' SQLCODE
+               END-IF
+           END-IF.
+
+           CLOSE VSAM_Customer_Data
+               INVALID KEY DISPLAY 'ERROR CLOSING VSAM_Customer_Data'.
+
+           IF CFG-LOG-REJECTS = 'Y'
+               CLOSE REJECT-OUT
+                   INVALID KEY DISPLAY 'ERROR CLOSING REJECT-OUT'.
+           END-IF.
+
+           DISPLAY 'LOAD COMPLETE: Records=' WS-REC-COUNT ' Rejected=' WS-ERR-COUNT.
+
+           .
+
+       *-----------------------------------------------------------------
+       * ABEND-PROCEDURE - rollback & close files
+       *-----------------------------------------------------------------
+       ABEND-PROCEDURE.
+           DISPLAY 'ABEND: rolling back transaction and closing resources'.
+           EXEC SQL ROLLBACK END-EXEC
+           IF SQLCODE NOT = 0
+               DISPLAY 'ROLLBACK FAILED SQLCODE=' SQLCODE
+           END-IF.
+
+           CLOSE VSAM_Customer_Data
+               INVALID KEY DISPLAY 'ERROR: CLOSE VSAM failed on ABEND'.
+           IF CFG-LOG-REJECTS = 'Y'
+               CLOSE REJECT-OUT
+                   INVALID KEY DISPLAY 'ERROR: CLOSE REJECT failed on ABEND'.
+           END-IF.
+
+           STOP RUN.
