@@ -1,12 +1,12 @@
 Target Table,Target Column,Source Table,Source Column,Expression,Remarks  
-DB2_Customer_Data.csv,FULL_NAME,VSAM_Customer_Data.csv,FULL_NAME,FULL_NAME,No Transformation applied for this column  
+DB2_Customer_Data.csv,FULL_NAME,VSAM_Customer_Data.csv,FULL_NAME,FULL_NAME,No transformation applied  
 DB2_Customer_Data.csv,DATE_OF_BIRTH,VSAM_Customer_Data.csv,DOB,DOB(1:4) '-' DOB(5:2) '-' DOB(7:2),Formatted as YYYY-MM-DD  
-DB2_Customer_Data.csv,GENDER,VSAM_Customer_Data.csv,GENDER,GENDER,No Transformation applied for this column  
-DB2_Customer_Data.csv,ADDRESS,VSAM_Customer_Data.csv,ADDRESS,ADDRESS,No Transformation applied for this column  
-DB2_Customer_Data.csv,PHONE_NUMBER,VSAM_Customer_Data.csv,PHONE,PHONE,No Transformation applied for this column  
-DB2_Customer_Data.csv,EMAIL_ADDRESS,VSAM_Customer_Data.csv,EMAIL,EMAIL,No Transformation applied for this column  
-DB2_Customer_Data.csv,NATID,VSAM_Customer_Data.csv,NATID,NATID,No Transformation applied for this column  
-DB2_Customer_Data.csv,OCCUPATION,VSAM_Customer_Data.csv,OCCUPATION,OCCUPATION,No Transformation applied for this column  
+DB2_Customer_Data.csv,GENDER,VSAM_Customer_Data.csv,GENDER,GENDER,No transformation applied  
+DB2_Customer_Data.csv,ADDRESS,VSAM_Customer_Data.csv,ADDRESS,ADDRESS,No transformation applied  
+DB2_Customer_Data.csv,PHONE_NUMBER,VSAM_Customer_Data.csv,PHONE,PHONE,No transformation applied  
+DB2_Customer_Data.csv,EMAIL_ADDRESS,VSAM_Customer_Data.csv,EMAIL,EMAIL,No transformation applied  
+DB2_Customer_Data.csv,NATID,VSAM_Customer_Data.csv,NATID,NATID,No transformation applied  
+DB2_Customer_Data.csv,OCCUPATION,VSAM_Customer_Data.csv,OCCUPATION,OCCUPATION,No transformation applied  
 DB2_Customer_Data.csv,CUSTOMER_TYPE,VSAM_Customer_Data.csv,CUSTTYPE,CUSTTYPE,Derived based on age and occupation  
-DB2_Customer_Data.csv,ACCOUNT_NUMBERS,VSAM_Customer_Data.csv,ACCNUMS,ACCNUMS,No Transformation applied for this column  
+DB2_Customer_Data.csv,ACCOUNT_NUMBERS,VSAM_Customer_Data.csv,ACCNUMS,ACCNUMS,No transformation applied  
 DB2_Customer_Data.csv,AGE,VSAM_Customer_Data.csv,DOB,WS-CUR-YEAR - FUNCTION NUMVAL(DOB(1:4)),Calculated based on DOB
