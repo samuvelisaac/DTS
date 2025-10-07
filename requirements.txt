@@ -1,6 +1,8 @@
 streamlit
+st_javascript
 pandas
 requests
 urllib3
 httpx
 load_dotenv
+
