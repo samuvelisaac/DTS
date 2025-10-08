@@ -95,31 +95,25 @@ def create_session_p1():
     })
     return client
 
-def safe_save_csv_bytes(csv_bytes, filename):
-    try:
-        path = os.path.join(os.getcwd(), filename)
-        with open(path, "wb") as f:
-            f.write(csv_bytes)
-        return True, path
-    except Exception as e:
-        return False, str(e)
-
-def save_generated_lineage(df: pd.DataFrame, original_filename: str) -> (bytes, bool, str):
+def save_generated_file(df: pd.DataFrame, original_filename: str) -> (bytes, bool, str):
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     if not IS_LOCAL:
         return csv_bytes, False, ""
     try:
-        base_dir = os.path.join(DOWNLOADS_DIR, "Generated_Lineage_Files")
+        base_dir = os.path.join(DOWNLOADS_DIR, "Generated_Files")
         today_folder = datetime.now().strftime("%Y%m%d")
         output_dir = os.path.join(base_dir, today_folder)
         os.makedirs(output_dir, exist_ok=True)
 
-        version = 1
-        while True:
-            candidate = os.path.join(output_dir, f"{original_filename}_V{version}.csv")
-            if not os.path.exists(candidate):
-                break
-            version += 1
+        if os.path.exists(os.path.join(output_dir, f"{original_filename}.csv")):
+            candidate = os.path.join(output_dir, f"{original_filename}_res.csv")
+        else:
+            version = 1
+            while True:
+                candidate = os.path.join(output_dir, f"{original_filename}_V{version}.csv")
+                if not os.path.exists(candidate):
+                    break
+                version += 1
 
         with open(candidate, "wb") as f:
             f.write(csv_bytes)
@@ -315,13 +309,17 @@ def github_filtered_files(tab_name: str):
         return []
 
     if tab_name == "tab1":
-        return [f for f in files if not (f.endswith("_ln.csv") or f.endswith("_dq.csv"))]
+        return [f for f in files if not (f.endswith("_ln.csv") or f.endswith("_dq.csv") or f.endswith("_mp.csv") or f.endswith("_res.csv"))]
     if tab_name == "tab2":
         return [f for f in files if f.endswith("_ln.csv")]
     if tab_name == "tab3":
-        return [f for f in files if not (f.endswith("_ln.csv") or f.endswith("_dq.csv"))]
+        return [f for f in files if not (f.endswith("_ln.csv") or f.endswith("_dq.csv") or f.endswith("_mp.csv") or f.endswith("_res.csv"))]
     if tab_name == "tab4":
         return [f for f in files if f.endswith("_dq.csv")]
+    if tab_name == "tab51":
+        return [f for f in files if not (f.endswith("_ln.csv") or f.endswith("_dq.csv") or f.endswith("_mp.csv") or f.endswith("_res.csv"))]
+    if tab_name == "tab52":
+        return [f for f in files if not (f.endswith("_ln.csv") or f.endswith("_dq.csv") or f.endswith("_mp.csv") or f.endswith("_res.csv"))]
     return files
 
 def make_github_session():
@@ -349,7 +347,7 @@ def refresh_github_files():
         st.session_state["github_files"] = [f["name"] for f in resp.json() if f["type"] == "file"]
 
 def tab3_dq_rules():
-    st.header("Create DQ Rules (from DDL)")
+    st.subheader("Create DQ Rules (from DDL)")
 
     github_res = None
     uploaded_ddl = None
@@ -368,7 +366,7 @@ def tab3_dq_rules():
             ddl_content = uploaded_ddl.read().decode("utf-8", errors="replace")
 
     if ddl_content:
-        st.subheader("DDL Preview")
+        st.markdown("##### DDL Preview")
         st.text_area("DDL", ddl_content, height=240, key="ddl_preview_tab3")
 
         if st.button("🚀 Generate DQ Rules from DDL"):
@@ -403,23 +401,26 @@ def tab3_dq_rules():
                         return
 
                     for nm, raw in raws.items():
-                        file_name_value3 = os.path.splitext(uploaded_ddl.name)[0] if uploaded_ddl else github_res[0]
-                        last_dot_index3 = file_name_value3.rfind('.')
-                        file_name_f3 = file_name_value3[0:last_dot_index3]
-                        save_file_name = file_name_f3
-                        st.subheader(f"Output - {save_file_name}")
+                        file_name_value = os.path.splitext(uploaded_ddl.name)[0] if uploaded_ddl else github_res[0]
+                        last_dot_index = len(file_name_value) if file_name_value.lower().rfind('.') == -1 else file_name_value.lower().rfind('.')
+                        file_name_f = file_name_value[0:last_dot_index]
+                        st.markdown(f"##### 🔹 Create DQ Rules Output - {file_name_f}")
 
                         try:
                             df = pd.read_csv(StringIO(raw), sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
                             st.dataframe(df, use_container_width=True)
-                            csv_bytes = df.to_csv(index=False).encode("utf-8")
 
-                            saved, path = safe_save_csv_bytes(csv_bytes, f"{save_file_name}.csv")
-                            if saved:
-                                st.info(f"💾 Saved locally to: {path}")
+                            # Save into Generated_Files/YYYYMMDD with versioning when local; and always provide download button
+                            csv_bytes, saved_flag, saved_path = save_generated_file(df, file_name_f)
+                            dl_filename = f"{file_name_f}_dq.csv"
 
-                            gh_filename = f"{save_file_name}_dq.csv"
-                            ok, msg = save_to_github(gh_filename, csv_bytes)
+                            if saved_flag:
+                                st.info(f"Saved to: {saved_path}")
+                            else:
+                                st.info("File not saved locally (running in cloud or no Downloads). Use download button below.")
+
+                            gh_filename = dl_filename
+                            ok,msg = save_to_github(gh_filename, csv_bytes)
                             refresh_github_files()
 
                             st.info(msg)
@@ -427,9 +428,165 @@ def tab3_dq_rules():
                                 st.info("File not saved into Github. Use download button below.")
 
                             st.download_button(
-                                f"⬇️ Download {save_file_name}.csv",
+                                label=f"⬇️ Download CSV as {dl_filename}",
                                 data=csv_bytes,
-                                file_name=f"{save_file_name}.csv",
+                                file_name=dl_filename,
+                                mime="text/csv"
+                            )
+
+                        except Exception as e:
+                            st.warning(f"Could not parse output as CSV: {e}")
+                            st.text_area(f"{nm} raw", raw, height=200)
+                except httpx.TimeoutException:
+                    st.error("⏱️ Request timed out while calling pipeline. Try again later.")
+                except httpx.RequestError as e:
+                    st.error(f"⚠️ Network error: {e}")
+                except httpx.HTTPStatusError as e:
+                    try:
+                        err = r.json()
+                    except Exception:
+                        err = {"error": str(e)}
+                    st.error("❌ Processing failed.")
+                    st.json(err)
+                except Exception as e:
+                    st.error(f"⚠️ Failed to call DQ pipeline: {e}")
+
+def tab5_link_mapping():
+    st.subheader("Create Link Mapping (From DDL and Glossary)")
+
+    github_res_ddl = None
+    github_res_glossary = None
+    uploaded_ddl = None
+    uploaded_glossary = None
+    ddl_content = ""
+    glossary_content = None
+    glossary_content1 = ""
+
+    # ------------------------------------
+    # ✅ Input source handling
+    # ------------------------------------
+    if st.session_state.get("github_files"):
+        st.markdown("### 📁 Select files from GitHub")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            github_res_ddl = github_file_dropdown("tab51")
+        with col2:
+            github_res_glossary = github_file_dropdown("tab52")
+
+        if github_res_ddl and github_res_ddl[1]:
+            try:
+                ddl_content = requests.get(github_res_ddl[1], timeout=30).text
+            except Exception as e:
+                st.error(f"⚠️ Failed to fetch DDL from GitHub: {e}")
+
+        if github_res_glossary and github_res_glossary[1]:
+            try:
+                req = requests.get(github_res_glossary[1], timeout=30).text
+                glossary_content = pd.read_csv(StringIO(req), sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
+                glossary_content1 = glossary_content.to_csv(index=False)
+            except Exception as e:
+                st.error(f"⚠️ Failed to fetch Glossary file from GitHub: {e}")
+
+    else:
+        st.markdown("##### 📤 Upload Local Files")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            uploaded_ddl = st.file_uploader("Upload DDL (.txt or .sql)", type=["txt", "sql"], key="link_mapping_ddl_upload")
+            if uploaded_ddl:
+                ddl_content = uploaded_ddl.read().decode("utf-8", errors="replace")
+        with col2:
+            uploaded_glossary = st.file_uploader("Upload Glossary (.csv)", type=["csv"], key="link_mapping_glossary_upload")
+            if uploaded_glossary:
+                try:
+                    glossary_content = pd.read_csv(uploaded_glossary, sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
+                    glossary_content1 = glossary_content.to_csv(index=False)
+                except Exception as e:
+                    st.error(f"Failed to parse file: {e}")
+
+    # ------------------------------------
+    # ✅ Show previews
+    # ------------------------------------
+    if ddl_content:
+        st.markdown("##### DDL Preview")
+        st.text_area("DDL", ddl_content, height=240, key="ddl_preview_linkmap")
+
+    if glossary_content is not None:
+        st.markdown("##### Glossary Preview")
+        st.dataframe(glossary_content, use_container_width=True)
+
+    # ------------------------------------
+    # ✅ Call Pipeline
+    # ------------------------------------
+    if ddl_content and glossary_content1:
+        if st.button("🚀 Generate Link Mapping"):
+            pipeline_id = 7288
+            workflow_name = "DI_postgresDDL_glossary_mapping_wf"
+
+            payload = {
+                "pipeLineId": pipeline_id,
+                "userInputs": {
+                    "{{postgres_DDL}}": ddl_content,
+                    "{{glossary_file}}": glossary_content1
+                },
+                "executionId": f"linkmap-exec-{int(time.time())}",
+                "user": "samuvel.isaac@ascendion.com"
+            }
+
+            with st.spinner(f"Running pipeline: {workflow_name}..."):
+                try:
+                    sess = create_session_p1()
+                    r = sess.post(API_URL_P1, json=payload, timeout=300)
+                    r.raise_for_status()
+
+                    out = r.json()
+                    agents = out.get("pipeline", {}).get("pipeLineAgents", [])
+                    tasks = out.get("pipeline", {}).get("tasksOutputs", [])
+
+                    raws = {}
+                    for agent, t in zip(agents, tasks):
+                        nm = agent.get("agent", {}).get("name", "agent").strip()
+                        rv = t.get("raw", "")
+                        if rv:
+                            raws[nm] = rv.split("\n\n", 1)[0]
+
+                    if not raws:
+                        st.warning("No output produced by pipeline.")
+                        return
+
+                    for nm, raw in raws.items():
+                        file_name_value = os.path.splitext(uploaded_glossary.name)[0] if uploaded_glossary else github_res_glossary[0]
+                        last_dot_index = len(file_name_value) if file_name_value.lower().rfind('.') == -1 else file_name_value.lower().rfind('.')
+                        file_name_f = file_name_value[0:last_dot_index]
+
+                        st.markdown(f"##### 🔹 Create Link Mapping Output - {file_name_f}")
+
+                        try:
+                            df = pd.read_csv(StringIO(raw), sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
+                            st.dataframe(df, use_container_width=True)
+
+                            # Save into Generated_Files/YYYYMMDD with versioning when local; and always provide download button
+                            csv_bytes, saved_flag, saved_path = save_generated_file(df, file_name_f)
+                            dl_filename = f"{file_name_f}_mp.csv"
+
+                            if saved_flag:
+                                st.info(f"Saved to: {saved_path}")
+                            else:
+                                st.info("File not saved locally (running in cloud or no Downloads). Use download button below.")
+    
+                            gh_filename = dl_filename
+                            ok,msg = save_to_github(gh_filename, csv_bytes)
+                            refresh_github_files()
+
+                            st.info(msg)
+                            if not ok:
+                                st.info("File not saved into Github. Use download button below.")
+
+                            st.download_button(
+                                label=f"⬇️ Download CSV as {dl_filename}",
+                                data=csv_bytes,
+                                file_name=dl_filename,
                                 mime="text/csv"
                             )
                         except Exception as e:
@@ -448,7 +605,10 @@ def tab3_dq_rules():
                     st.error("❌ Processing failed.")
                     st.json(err)
                 except Exception as e:
-                    st.error(f"⚠️ Failed to call DQ pipeline: {e}")
+                    st.error(f"⚠️ Failed to call pipeline: {e}")
+
+    else:
+        st.info("Please upload or select both DDL and Glossary files to proceed.")
 
 # ---------------------------
 # Streamlit UI
@@ -530,11 +690,12 @@ st.markdown(
 # --------------------------
 # Tab Definitions
 # --------------------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab7 = st.tabs([
     "📂 Determine Lineage",
     "🔗 Upload Lineage",
     "🛠️ Create DQ Rules",
     "✅ Upload DQ Rules",
+    "⇄ Create Link Mapping",
     "⚙️"
 ])
 
@@ -542,7 +703,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # TAB 1: Determine Lineage (Program1)
 # -----------------------------------
 with tab1:
-    st.header("Determine Lineage")
+    st.subheader("Determine Lineage")
     # inside your tab (example: tab1)
     program_type = st.selectbox("Select Program Type", ["COBOL", "Stored Procedure"], index=None, placeholder="Select from list", key="program_type_tab1")
 
@@ -572,7 +733,7 @@ with tab1:
     
         # ✅ Safely handle preview
         if ((github_res and github_res[0]) or uploaded_file) and program_type and content:
-            st.subheader("📄 Input File Preview")
+            st.markdown("##### 📄 Input File Preview")
             st.text_area("Program file content", content, height=240, key="preview_tab1")
 
             if st.button("🚀 Process Agent (Generate Lineage CSV)"):
@@ -584,7 +745,7 @@ with tab1:
                     st.json(res.get("error", {}))
                 else:
                     file_name_value = os.path.splitext(uploaded_file.name)[0] if uploaded_file else github_res[0]
-                    last_dot_index = file_name_value.rfind('.')
+                    last_dot_index = len(file_name_value) if file_name_value.lower().rfind('.') == -1 else file_name_value.lower().rfind('.')
                     file_name_f = file_name_value[0:last_dot_index]
 
                     st.success(f"✅ API done in {res['api_duration']}s")
@@ -592,7 +753,7 @@ with tab1:
                     st.session_state["lineage_raws"] = res["raws"]
                     st.session_state["lineage_original_filename"] = file_name_f
                     st.session_state["lineage_program_type"] = program_type
-    
+
                 # show outputs if present
                 if st.session_state.get("lineage_raws"):
                     raws = st.session_state["lineage_raws"]
@@ -600,7 +761,7 @@ with tab1:
                     program_type = st.session_state["lineage_program_type"]
             
                     for agent_name, raw_output in raws.items():
-                        st.subheader(f"🔹 Output Preview - {agent_name}")
+                        st.markdown(f"##### 🔹 Determine Lineage Output - {original_filename}")
             
                         # try parse as csv
                         parsed_df = None
@@ -608,7 +769,7 @@ with tab1:
                             parsed_df = pd.read_csv(StringIO(raw_output), sep=",", quotechar='"', skip_blank_lines=True, on_bad_lines="skip")
                         except Exception:
                             parsed_df = None
-            
+
                         if parsed_df is None:
                             st.warning("Output is not a valid CSV — showing raw text")
                             st.text_area(f"{agent_name} raw output", raw_output, height=240)
@@ -622,17 +783,17 @@ with tab1:
                                 parsed_df["Target Table"] = parsed_df["Target Table"].astype(str).apply(lambda x: x if x.endswith(".csv") else f"{x}.csv")
             
                         st.dataframe(parsed_df, use_container_width=True)
-            
-                        # Save into Generated_Lineage_Files/YYYYMMDD with versioning when local; and always provide download button
-                        csv_bytes, saved_flag, saved_path = save_generated_lineage(parsed_df, original_filename)
-                        dl_filename = os.path.basename(saved_path) if saved_flag else f"{original_filename}"
+
+                        # Save into Generated_Files/YYYYMMDD with versioning when local; and always provide download button
+                        csv_bytes, saved_flag, saved_path = save_generated_file(parsed_df, original_filename)
+                        dl_filename = f"{original_filename}_ln.csv"
 
                         if saved_flag:
                             st.info(f"Saved locally to: {saved_path}")
                         else:
                             st.info("File not saved locally (running in cloud or no Downloads). Use download button below.")
 
-                        gh_filename = f"{file_name_f}_ln.csv"
+                        gh_filename = dl_filename
                         ok,msg = save_to_github(gh_filename, csv_bytes)
                         refresh_github_files()
 
@@ -652,7 +813,7 @@ with tab1:
 # TAB 2: Upload Lineage (Program2 lineage creation)
 # ------------------------
 with tab2:
-    st.header("Upload Lineage")
+    st.subheader("Upload Lineage")
 
     sources = get_sources("source", "")
     if not sources:
@@ -701,7 +862,7 @@ with tab2:
                                 st.error(f"Failed to parse uploaded file: {e}")
 
                     if df is not None:
-                        st.subheader("Input Preview")
+                        st.markdown("##### Input Preview")
                         st.dataframe(df, use_container_width=True)
 
                         if st.button("🚀 Process Lineage Creation"):
@@ -741,16 +902,37 @@ with tab2:
                                             "Lineage Response": "⚠️ Skipped"
                                         })
 
-                            res_df = pd.DataFrame(results)
-                            st.subheader("✅ Lineage Results")
-                            st.dataframe(res_df, use_container_width=True)
+                                file_name_value = os.path.splitext(uploaded.name)[0] if uploaded else github_res[0]
+                                last_dot_index = len(file_name_value) if file_name_value.lower().rfind('.') == -1 else file_name_value.lower().rfind('.')
+                                file_name_f = file_name_value[0:last_dot_index]
 
-                            csv_bytes = res_df.to_csv(index=False).encode("utf-8")
-                            saved, path = safe_save_csv_bytes(csv_bytes, "Lineage_Results.csv")
-                            if saved:
-                                st.info(f"Saved locally to: {path}")
-                            st.download_button("⬇️ Download Lineage_Results.csv", data=csv_bytes,
-                                               file_name="Lineage_Results.csv", mime="text/csv")
+                                res_df = pd.DataFrame(results)
+                                st.markdown(f"##### 🔹 Lineage Output - {file_name_f}")
+                                st.dataframe(res_df, use_container_width=True)
+        
+                                # Save into Generated_Files/YYYYMMDD with versioning when local; and always provide download button
+                                csv_bytes, saved_flag, saved_path = save_generated_file(res_df, file_name_f)
+                                dl_filename = f"{file_name_f}_res.csv"
+
+                                if saved_flag:
+                                    st.info(f"Saved to: {saved_path}")
+                                else:
+                                    st.info("File not saved locally (running in cloud or no Downloads). Use download button below.")
+
+                                gh_filename = dl_filename
+                                ok,msg = save_to_github(gh_filename, csv_bytes)
+                                refresh_github_files()
+
+                                st.info(msg)
+                                if not ok:
+                                    st.info("File not saved into Github. Use download button below.")
+
+                                st.download_button(
+                                    label=f"⬇️ Download CSV as {dl_filename}",
+                                    data=csv_bytes,
+                                    file_name=dl_filename,
+                                    mime="text/csv"
+                                )
 
 # ------------------------
 # TAB 3: Create DQ Rules (call DQ pipeline from DDL)
@@ -762,7 +944,7 @@ with tab3:
 # TAB 4: Upload DQ Rules (CSV/TXT) -> create monitors
 # ------------------------
 with tab4:
-    st.header("Upload DQ Rules (Create Monitors)")
+    st.subheader("Upload DQ Rules (Create Monitors)")
 
     sources = get_sources("source", "")
     if not sources:
@@ -794,7 +976,7 @@ with tab4:
                         st.error(f"Failed to parse file: {e}")
 
             if df is not None:
-                st.subheader("Preview")
+                st.markdown("##### Preview")
                 st.dataframe(df, use_container_width=True)
 
                 if st.button("🚀 Create DQ Monitors"):
@@ -803,22 +985,49 @@ with tab4:
                         for idx, row in df.iterrows():
                             results.append(create_dq_monitor(SRC_ID, row, idx))
 
-                    result_df = pd.DataFrame(results)
-                    st.subheader("Monitor Creation Results")
-                    st.dataframe(result_df, use_container_width=True)
+                        file_name_value = os.path.splitext(up.name)[0] if up else github_res[0]
+                        last_dot_index = len(file_name_value) if file_name_value.lower().rfind('.') == -1 else file_name_value.lower().rfind('.')
+                        file_name_f = file_name_value[0:last_dot_index]
 
-                    csv_bytes = result_df.to_csv(index=False).encode("utf-8")
-                    saved, path = safe_save_csv_bytes(csv_bytes, "DQ_Monitors_Results.csv")
-                    if saved:
-                        st.info(f"Saved locally to: {path}")
-                    st.download_button("⬇️ Download DQ_Monitors_Results.csv", data=csv_bytes,
-                                       file_name="DQ_Monitors_Results.csv", mime="text/csv")
+                        st.markdown(f"##### 🔹 DQ Rules Output - {file_name_f}")
+                        result_df = pd.DataFrame(results)
+                        st.dataframe(result_df, use_container_width=True)
+
+                        # Save into Generated_Files/YYYYMMDD with versioning when local; and always provide download button
+                        csv_bytes, saved_flag, saved_path = save_generated_file(result_df, file_name_f)
+                        dl_filename = f"{file_name_f}_res.csv"
+
+                        if saved_flag:
+                            st.info(f"Saved to: {saved_path}")
+                        else:
+                            st.info("File not saved locally (running in cloud or no Downloads). Use download button below.")
+
+                        gh_filename = dl_filename
+                        ok,msg = save_to_github(gh_filename, csv_bytes)
+                        refresh_github_files()
+
+                        st.info(msg)
+                        if not ok:
+                            st.info("File not saved into Github. Use download button below.")
+
+                        st.download_button(
+                            label=f"⬇️ Download CSV as {dl_filename}",
+                            data=csv_bytes,
+                            file_name=dl_filename,
+                            mime="text/csv"
+                        )
+
+# -----------------------------------------
+# TAB 5: Create Link Mapping
+# -----------------------------------------
+with tab5:
+    tab5_link_mapping()
 
 # -----------------------------------------
 # TAB 5: GitHub Settings (replace existing block)
 # -----------------------------------------
-with tab5:
-    st.header("⚙️ GitHub Settings")
+with tab7:
+    st.subheader("⚙️ GitHub Settings")
 
     # --- small message placeholders ---
     if "_gh_save_ok" not in st.session_state:
