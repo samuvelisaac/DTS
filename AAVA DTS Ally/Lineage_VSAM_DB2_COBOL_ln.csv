@@ -1,0 +1,14 @@
+```csv
+Remarks
+No transformation applied for this column
+DOB formatted as YYYY-MM-DD
+No transformation applied for this column
+No transformation applied for this column
+No transformation applied for this column
+No transformation applied for this column
+No transformation applied for this column
+No transformation applied for this column
+Derived based on age and occupation if blank or generic
+No transformation applied for this column
+Age calculated based on DOB and current year
+""
