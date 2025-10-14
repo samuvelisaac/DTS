@@ -1,0 +1,12 @@
+physical table name,physical attribute name,glossary,category,term name,Column ID,Term ID,Link Mapping Response
+customer_data_Bank,full_name,Bank,Customer Data,Full Name,,133,⚠️ Skipped
+customer_data_Bank,date_of_birth,Bank,Customer Data,Date of Birth,,134,⚠️ Skipped
+customer_data_Bank,gender,Bank,Customer Data,Gender,,135,⚠️ Skipped
+customer_data_Bank,address,Bank,Customer Data,Address,,136,⚠️ Skipped
+customer_data_Bank,phone_number,Bank,Customer Data,Phone Number,,137,⚠️ Skipped
+customer_data_Bank,email_address,Bank,Customer Data,Email Address,,138,⚠️ Skipped
+customer_data_Bank,national_id_or_passport_number,Bank,Customer Data,National ID/Passport Number,,139,⚠️ Skipped
+customer_data_Bank,occupation,Bank,Customer Data,Occupation,,140,⚠️ Skipped
+customer_data_Bank,customer_type,Bank,Customer Data,Customer Type,,141,⚠️ Skipped
+customer_data_Bank,account_numbers,Bank,Customer Data,Account Numbers,,142,⚠️ Skipped
+customer_data_Bank,age,Bank,Customer Data,Age,,143,⚠️ Skipped
