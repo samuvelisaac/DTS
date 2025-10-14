@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS tsb.customer_data_Bank (
+CREATE TABLE IF NOT EXISTS tsb.customer_data_bank (
 
     customer_id serial4 NOT NULL,
 
