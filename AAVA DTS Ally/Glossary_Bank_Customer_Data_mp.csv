@@ -1,0 +1,12 @@
+physical table name,physical attribute name,glossary,category,term name
+customer_data_bank,full_name,Bank,Customer Data,Full Name
+customer_data_bank,date_of_birth,Bank,Customer Data,Date of Birth
+customer_data_bank,gender,Bank,Customer Data,Gender
+customer_data_bank,address,Bank,Customer Data,Address
+customer_data_bank,phone_number,Bank,Customer Data,Phone Number
+customer_data_bank,email_address,Bank,Customer Data,Email Address
+customer_data_bank,national_id_or_passport_number,Bank,Customer Data,National ID/Passport Number
+customer_data_bank,occupation,Bank,Customer Data,Occupation
+customer_data_bank,customer_type,Bank,Customer Data,Customer Type
+customer_data_bank,account_numbers,Bank,Customer Data,Account Numbers
+customer_data_bank,age,Bank,Customer Data,Age
