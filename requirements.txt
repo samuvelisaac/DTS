@@ -1,14 +1,8 @@
-datetime
-dotenv
 streamlit
 pandas
 httpx
 certifi
 requests
 urllib3
-urllib
-
-
-
-
-
+python-dotenv
+streamlit-javascript
