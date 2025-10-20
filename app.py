@@ -242,12 +242,12 @@ def create_lineage(src_column_id, trg_column_id):
     except Exception:
         return {"error": res.text}
 
-def delete_lineage(src_column_id, trg_column_id):
+def delete_lineage(src_column_id, trg_column_id, dp_type):
     params = {
         "source_id": src_column_id,
-        "source_type": "property",
+        "source_type": dp_type,
         "target_id": trg_column_id,
-        "target_type": "property"
+        "target_type": dp_type
     }
 
     try:
@@ -302,12 +302,12 @@ def search_glossary(query,asset_type, parent_id = ""):
 def find_glossary_category_term(glossary_name, category_name, term_name):
     glossaries = search_glossary(glossary_name, "glossary")
     if not glossaries:
-        return None
+        return None, None, None
     glossary_id = glossaries[0]["asset"]["id"]
 
     categories = search_glossary(category_name, "category", glossary_id)
     if not categories:
-        return None
+        return None, None, None
     category_id = ""
     for c in categories:
         if c["parents"][0]["id"] == glossary_id:
@@ -316,7 +316,7 @@ def find_glossary_category_term(glossary_name, category_name, term_name):
 
     terms = search_glossary(term_name, "term", category_id)
     if not terms:
-        return None
+        return None, None, None
     term_id = ""
     for t in terms:
         if t["parents"][0]["id"] == glossary_id and t["parents"][1]["id"] == category_id:
@@ -424,11 +424,57 @@ def github_file_dropdown(tab_name: str, s):
 # ============================================================
 # Helper: Clear Callback
 # ============================================================
+#def clear_github_settings():
+#    """Callback for 🧹 Clear button — safely trigger a clear on next rerun."""
+#    st.session_state["_gh_clear_pending"] = True
+#    st.toast("🧹 Cleared all GitHub input fields and dropdown reset pending...", icon="✅")
+#    st.rerun()
+
 def clear_github_settings():
-    """Callback for 🧹 Clear button — safely trigger a clear on next rerun."""
-    st.session_state["_gh_clear_pending"] = True
-    st.toast("🧹 Cleared all GitHub input fields and dropdown reset pending...", icon="✅")
-    st.rerun()
+    """Clear all GitHub input fields and dropdown selection."""
+    # Reset dropdown selection safely
+    if "file_select_GitHub_Settings" in st.session_state:
+        st.session_state["file_select_GitHub_Settings"] = "-- None --"
+    st.session_state["selected_value"] = None
+    st.session_state["_gh_last_selected"] = None
+
+    # Clear textbox states even if manually entered (no file loaded)
+    for prefix in ("GT_", "RO_", "RN_", "FP_"):
+        for key in list(st.session_state.keys()):
+            if key.startswith(prefix):
+                del st.session_state[key]
+
+    # Reset other temporary/session variables
+    st.session_state["github_settings"] = {}
+    st.session_state["tmp_github_settings"] = {}
+    st.session_state["_gh_cleared_selected"] = True
+    st.session_state["_gh_force_reload"] = False
+
+    st.toast("🧹 Cleared all GitHub input fields.", icon="✅")
+
+
+def clear_github_settings_callback():
+    """Callback for 🧹 Clear or after Save/Delete — safely clears without modifying live widgets"""
+    # Mark that we want to reset the dropdown on next rerun
+    st.session_state["_gh_reset_dropdown"] = True
+
+    # Clear cached settings
+    for key in list(st.session_state.keys()):
+        if key.startswith(("GT_", "RO_", "RN_", "FP_")):
+            del st.session_state[key]
+
+    st.session_state["github_settings"] = {}
+    st.session_state["tmp_github_settings"] = {}
+    st.session_state["_gh_last_selected"] = None
+    st.session_state["selected_value"] = None
+    st.session_state["_gh_cleared_selected"] = True
+
+    st.toast("🧹 Cleared all GitHub input fields.", icon="✅")
+
+    # ✅ Use rerun flag (no direct st.rerun here)
+    st.session_state["_gh_needs_rerun"] = True
+#    st.rerun()
+
 
 def save_to_github(filename: str, content_bytes: bytes):
     """Save file to GitHub repo if settings exist in session."""
@@ -879,7 +925,7 @@ def tab2_delete_lineage():
             if not collections:
                 st.info("No collections found for selected source.")
             else:
-                selected_collection = st.selectbox("Select Collection", list(collections.keys()), index=None, placeholder="Select from list", key="coll_tab2")
+                selected_collection = st.selectbox("Select Collection", list(collections.keys()), index=None, placeholder="Select from list", key="coll_tab21")
                 if not selected_collection:
                     st.write("Select Collection from the list")
                 else:
@@ -917,6 +963,7 @@ def tab2_delete_lineage():
 
                         if st.button("🚀 Process Lineage Creation"):
                             results = []
+                            tbl_rec = 1
                             with st.spinner("Processing lineage creation..."):
                                 for idx, row in df.iterrows():
                                     src_table = str(row.get("Source Table", "")).strip()
@@ -926,13 +973,33 @@ def tab2_delete_lineage():
 
                                     desc_line = ""
 
-                                    _, src_col_id = find_dataset_and_column(SOURCE_ID, COLLECTION_ID, src_table, src_column)
-                                    _, trg_col_id = find_dataset_and_column(SOURCE_ID, COLLECTION_ID, trg_table, trg_column)
+                                    src_tbl_id, src_col_id = find_dataset_and_column(SOURCE_ID, COLLECTION_ID, src_table, src_column)
+                                    trg_tbl_id, trg_col_id = find_dataset_and_column(SOURCE_ID, COLLECTION_ID, trg_table, trg_column)
+
+                                    if tbl_rec == 1:
+                                        tbl_rec = 0
+                                        if src_tbl_id and trg_tbl_id:
+                                            lineage_response = delete_lineage(src_tbl_id, trg_tbl_id, "dataset")
+                                            results.append({
+                                                "Source Table": src_table, "Source Column": "Source Table Level",
+                                                "Target Table": trg_table, "Target Column": "Target Table Level",
+                                                "Source Col ID": src_tbl_id, "Target Col ID": trg_tbl_id,
+                                                "Source Desc Update": "", "Target Desc Update": "",
+                                                "Lineage Response": lineage_response or "Successfully Deleted"
+                                            })
+                                        else:
+                                            results.append({
+                                                "Source Table": src_table, "Source Column": "Source Table Level",
+                                                "Target Table": trg_table, "Target Column": "Target Table Level",
+                                                "Source Col ID": src_tbl_id, "Target Col ID": trg_tbl_id,
+                                                "Source Desc Update": "", "Target Desc Update": "",
+                                                "Lineage Response": "⚠️ Skipped"
+                                            })
 
                                     if src_col_id and trg_col_id:
                                         src_update = update_asset_desc(src_col_id, desc_line)
                                         trg_update = update_asset_desc(trg_col_id, desc_line)
-                                        lineage_response = delete_lineage(src_col_id, trg_col_id)
+                                        lineage_response = delete_lineage(src_col_id, trg_col_id, "property")
                                         results.append({
                                             "Source Table": src_table, "Source Column": src_column,
                                             "Target Table": trg_table, "Target Column": trg_column,
@@ -1372,7 +1439,7 @@ def tab6_upload_link_mapping():
             if not collections:
                 st.info("No collections found for selected source.")
             else:
-                selected_collection = st.selectbox("Select Collection", list(collections.keys()), index=None, placeholder="Select from list", key="coll_tab2")
+                selected_collection = st.selectbox("Select Collection", list(collections.keys()), index=None, placeholder="Select from list", key="coll_tab6")
                 if not selected_collection:
                     st.write("Select Collection from the list")
                 else:
@@ -1480,69 +1547,57 @@ def tab6_upload_link_mapping():
                                 )
 
 
-# ============================================================
-# Tab 7 - GitHub Settings
-# ============================================================
 def tab7_github_settings(s):
-    st.markdown("#### ⚙️ GitHub Settings")
+    st.subheader("⚙️ GitHub Settings")
 
-    # Handle pending clear before rendering dropdown
-    if st.session_state.get("_gh_clear_pending"):
-        for key in list(st.session_state.keys()):
-            if key.startswith(("GT_", "RO_", "RN_", "FP_")):
-                del st.session_state[key]
-        st.session_state["_gh_last_selected"] = None
-        st.session_state["selected_value"] = None
-        st.session_state["_gh_cleared_selected"] = True
-        st.session_state["github_settings"] = {}
-        st.session_state["tmp_github_settings"] = {}
-        st.session_state.pop("file_select_GitHub_Settings", None)
-        st.session_state["_gh_clear_pending"] = False
-        st.toast("✅ GitHub settings cleared.", icon="🧹")
+    # Handle pending safe resets before rendering widgets
+    if st.session_state.pop("_gh_needs_rerun", False):
         st.rerun()
 
+    # Handle dropdown reset safely (before selectbox is drawn)
+    if st.session_state.pop("_gh_reset_dropdown", False):
+        st.session_state.pop("file_select_GitHub_Settings", None)
+
+    # ensure version counter exists
+    st.session_state.setdefault("gh_clear_version", 0)
     st.session_state.setdefault("_gh_last_selected", None)
     st.session_state.setdefault("selected_value", None)
-    if '_gh_cleared_selected' not in st.session_state:
-        st.session_state["_gh_cleared_selected"] = False
+    st.session_state.setdefault("_gh_cleared_selected", False)
 
-    selected = github_file_dropdown("GitHub_Settings", s)
+    # show dropdown (this keeps its existing logic)
+    st.markdown("##### Existing GitHub Credential Files")
+    selected = github_file_dropdown("GitHub_Settings", s)  # unchanged
 
-    GitHub_Token, Repository_Owner, Repository_Name, Folder_Path = (
-        s["GitHub_Token"], s["Repository_Owner"], s["Repository_Name"], s["Folder_Path"]
-    )
-
-    token_val = owner_val = repo_val = folder_val = ""
-
-    # --- If a file is selected ---
+    # decide suffix for widget keys:
     if selected:
+        key_suffix = selected[0]  # use filename as suffix when file selected
+    else:
+        key_suffix = f"manual_v{st.session_state['gh_clear_version']}"
+
+    # If the user selected a file and it's a new selection, load its values into session (but do not overwrite widget keys)
+    if selected:
+#        last = st.session_state.get("_gh_last_selected")
+#        if last != selected[0]:
         try:
             df = pd.read_csv(selected[1])
             if {"token_ref", "owner", "repo", "folder"}.issubset(df.columns):
-                token, owner, repo, folder = df.iloc[0].tolist()
-                token_val = f"ghp_{token}"
-                owner_val, repo_val, folder_val = owner, repo, folder
+                token_ref, owner, repo, folder = df.iloc[0].tolist()
+                # store displayable token (prefix with ghp_ for usage in widget)
                 st.session_state["github_settings"] = {
-                    "token": token_val,
-                    "owner": owner_val,
-                    "repo": repo_val,
-                    "folder": folder_val
+                    "token": f"ghp_{token_ref}",
+                    "owner": owner,
+                    "repo": repo,
+                    "folder": folder,
                 }
-                if not st.session_state["_gh_last_selected"] == selected[0]:
-                    st.session_state["_gh_last_selected"] = selected[0]
-                    st.success(f"Loaded details from {selected[0]}")
-                    res1 = refresh_github_files({},source="session")
-                    if res1 and res1[:1] == "✅":
-                        st.success(res1)
-                        st.rerun()
-                    elif res1[:2] == "⚠️":
-                        st.warning(res1)
-                    else:
-                        st.error(res1)
+#                st.session_state["_gh_last_selected"] = selected[0]
+                st.success(f"Loaded details from {selected[0]}")
+                # refresh files (session source) so other tabs update
+                refresh_github_files({}, source="session")
+                # don't st.rerun() here — we now drive widget keys by key_suffix
             else:
-                st.warning("⚠️ Invalid file format.")
+                st.warning("⚠️ Selected file does not contain expected columns.")
         except Exception as e:
-            st.error(f"❌ Error loading file: {e}")
+            st.error(f"❌ Error loading selected credential file: {e}")
     else:
         if 'selected_file_indicator' not in st.session_state:
             st.session_state["selected_file_indicator"] = False
@@ -1556,7 +1611,7 @@ def tab7_github_settings(s):
                 st.success("No Github file seleted from the dropdown")
             if st.session_state["_gh_cleared_selected"]:
                 st.session_state["_gh_cleared_selected"] = False
-                token_val, owner_val, repo_val, folder_val = "", "", "", ""
+#                token_val, owner_val, repo_val, folder_val = "", "", "", ""
                 if st.session_state.get("selected_file_indicator") == False:
                     st.session_state["selected_file_indicator"] = True
                     st.rerun()
@@ -1566,67 +1621,73 @@ def tab7_github_settings(s):
             st.error(f"❌ Error not loading file: {e}")
 
     st.session_state["selected_file_indicator"] = False
+        
 
-    if selected:
-        # Textboxes for manual entry or loaded values
-        st.markdown("##### Enter or Edit GitHub Details")
-    else:
-        # Textboxes for manual entry or loaded values
-        st.markdown("##### Enter GitHub Details Manually")
+    # Prefill values for display in text boxes from session github_settings if present
+    gs = st.session_state.get("github_settings", {})
+    default_token = gs.get("token", "")
+    default_owner = gs.get("owner", "")
+    default_repo = gs.get("repo", "")
+    default_folder = gs.get("folder", "")
 
-    # --- Text boxes ---
-    key_suffix = st.session_state.get("_gh_last_selected", "manual")
-    token1 = st.text_input("GitHub Token", value=token_val, key=f"GT_{key_suffix}")
-    owner1 = st.text_input("Repository Owner", value=owner_val, key=f"RO_{key_suffix}")
-    repo1 = st.text_input("Repository Name", value=repo_val, key=f"RN_{key_suffix}")
-    folder1 = st.text_input("Folder Path", value=folder_val, key=f"FP_{key_suffix}")
+    st.markdown("##### Enter or Edit GitHub Details")
 
+    # IMPORTANT: keys include suffix so they are new widgets after a clear
+    token_key = f"GT_{key_suffix}"
+    owner_key = f"RO_{key_suffix}"
+    repo_key  = f"RN_{key_suffix}"
+    folder_key = f"FP_{key_suffix}"
+
+    # Use value= defaults so loaded credentials show in text boxes (but keys differ per suffix)
+    token1 = st.text_input("GitHub Token", value=default_token, key=token_key)
+    owner1 = st.text_input("Repository Owner", value=default_owner, key=owner_key)
+    repo1  = st.text_input("Repository Name", value=default_repo, key=repo_key)
+    folder1 = st.text_input("Folder Path", value=default_folder, key=folder_key)
+
+    # keep a tmp copy
     st.session_state["tmp_github_settings"] = {
         "token": token1, "owner": owner1, "repo": repo1, "folder": folder1
     }
 
-    # --- Action buttons ---
-    col1, col2, col3, _ = st.columns([1, 1, 1, 6])
+    # Action buttons
+    col1, col2, col3, _ = st.columns([1,1,1,5])
 
     with col1:
         if st.button("💾 Save", use_container_width=True):
             if all([token1, owner1, repo1, folder1]):
+                # form filename and save using the secure base credentials (from s)
                 save_name = f"{owner1}_{repo1}_gh.csv"
+                # token to write should not include "ghp_" prefix in file (keep only token_ref)
+                token_to_store = token1[4:] if token1.startswith("ghp_") else token1
                 msg = github_save_or_update_csv(
-                    GitHub_Token, Repository_Owner, Repository_Name, Folder_Path,
-                    save_name, token1[4:] if token1.startswith("ghp_") else token1,
-                    owner1, repo1, folder1
+                    s["GitHub_Token"], s["Repository_Owner"], s["Repository_Name"], s["Folder_Path"],
+                    save_name, token_to_store, owner1, repo1, folder1
                 )
                 st.toast(msg)
-
-                # ✅ Use base (secure) credentials for refresh
-                res1 = refresh_github_files(s, source="env")
-                st.session_state["_gh_force_reload"] = True
-                if res1.startswith("✅"):
-                    st.toast("✅ Saved & refreshed successfully", icon="💾")
+                # refresh the secure repo listing (so dropdown updates)
+                r = refresh_github_files(s, source="env")
+                if r.startswith("✅"):
+                    st.toast("✅ Saved & refreshed", icon="💾")
                 else:
-                    st.error(res1)
-                
-                # ✅ Clear and immediately reload new dropdown
-                clear_github_settings()
+                    st.error(r)
+                # clear to new 'manual' widgets so UI is consistent
+                clear_github_settings_callback()
+
             else:
                 st.warning("⚠️ Fill in all fields before saving.")
 
     with col2:
         if st.button("🗑️ Delete", use_container_width=True):
             if selected:
-                delete_github_file(
-                    GitHub_Token, Repository_Owner, Repository_Name, Folder_Path, selected[0]
-                )
+                delete_github_file(s["GitHub_Token"], s["Repository_Owner"], s["Repository_Name"], s["Folder_Path"], selected[0])
                 refresh_github_files(s, source="env")
-                st.toast("🗑️ File deleted successfully", icon="✅")
-                clear_github_settings()
+                st.toast("🗑️ File deleted", icon="✅")
+                clear_github_settings_callback()
             else:
                 st.warning("⚠️ Select a file to delete.")
 
     with col3:
-        st.button("🧹 Clear", use_container_width=True, on_click=clear_github_settings)
-
+        st.button("🧹 Clear", use_container_width=True, on_click=clear_github_settings_callback)
 
 
 # ---------------------------
