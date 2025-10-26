@@ -1,7 +1,7 @@
 ```csv
 Remarks
 No transformation applied
-Formatted DOB as YYYY-MM-DD
+Formatted as YYYY-MM-DD
 No transformation applied
 No transformation applied
 No transformation applied
@@ -10,5 +10,5 @@ No transformation applied
 No transformation applied
 Derived based on age and occupation
 No transformation applied
-Calculated based on DOB and current date
+Age calculated based on DOB
 ""
