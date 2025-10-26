@@ -1,14 +1,12 @@
-```csv
-Remarks
-No Transformation applied for this column
-Formatted DOB as YYYY-MM-DD
-No Transformation applied for this column
-No Transformation applied for this column
-No Transformation applied for this column
-No Transformation applied for this column
-No Transformation applied for this column
-No Transformation applied for this column
-Derived Customer Type based on age and occupation
-No Transformation applied for this column
-Age calculated based on DOB
-""
+Source Table,Source Column,Target Table,Target Column,Expression,Remarks  
+VSAM_Customer_Data.csv,FULL_NAME,DB2_Customer_Data.csv,FULL_NAME,TRIM(FULL_NAME),No transformation applied for this column  
+VSAM_Customer_Data.csv,DOB,DB2_Customer_Data.csv,DATE_OF_BIRTH,STRING DOB(1:4) '-' DOB(5:2) '-' DOB(7:2) DELIMITED BY SIZE INTO HV-DOB-STR,Format DOB as YYYY-MM-DD for DB2  
+VSAM_Customer_Data.csv,DOB,DB2_Customer_Data.csv,AGE,WS-CUR-YEAR - FUNCTION NUMVAL(DOB(1:4)),Calculate age based on DOB  
+VSAM_Customer_Data.csv,GENDER,DB2_Customer_Data.csv,GENDER,TRIM(GENDER),No transformation applied for this column  
+VSAM_Customer_Data.csv,ADDRESS,DB2_Customer_Data.csv,ADDRESS,TRIM(ADDRESS),No transformation applied for this column  
+VSAM_Customer_Data.csv,PHONE,DB2_Customer_Data.csv,PHONE_NUMBER,TRIM(PHONE),No transformation applied for this column  
+VSAM_Customer_Data.csv,EMAIL,DB2_Customer_Data.csv,EMAIL_ADDRESS,TRIM(EMAIL),No transformation applied for this column  
+VSAM_Customer_Data.csv,NATID,DB2_Customer_Data.csv,NATID,TRIM(NATID),No transformation applied for this column  
+VSAM_Customer_Data.csv,OCCUPATION,DB2_Customer_Data.csv,OCCUPATION,TRIM(OCCUPATION),No transformation applied for this column  
+VSAM_Customer_Data.csv,CUSTTYPE,DB2_Customer_Data.csv,CUSTOMER_TYPE,TRIM(CUSTTYPE),No transformation applied for this column  
+VSAM_Customer_Data.csv,ACCNUMS,DB2_Customer_Data.csv,ACCOUNT_NUMBERS,TRIM(ACCNUMS),No transformation applied for this column
