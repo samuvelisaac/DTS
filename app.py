@@ -644,17 +644,22 @@ def delete_github_file(base_token, base_owner, base_repo, base_folder, filename)
     url = f"https://api.github.com/repos/{base_owner}/{base_repo}/contents/{base_folder}/{filename}"
     headers = {"Authorization": f"token {base_token}", "Accept": "application/vnd.github.v3+json"}
 
-    resp = requests.get(url, headers=headers)
+    s = requests.Session()
+    retry = Retry(total=5, backoff_factor=0.5,
+                  status_forcelist=[500, 502, 503, 504])
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+
+    resp = s.get(url, headers=headers)
     if resp.status_code == 200:
         sha = resp.json()["sha"]
         payload = {"message": f"Delete {filename}", "sha": sha, "branch": "main"}
-        del_resp = requests.delete(url, headers=headers, json=payload)
+        del_resp = s.delete(url, headers=headers, json=payload)
         if del_resp.status_code == 200:
-            st.success(f"🗑️ File '{filename}' deleted successfully.")
+            return f"🗑️ File '{filename}' deleted successfully."
         else:
-            st.error(f"❌ Delete failed: {del_resp.status_code} - {del_resp.text}")
+            return f"❌ Delete failed: {del_resp.status_code} - {del_resp.text}"
     else:
-        st.warning(f"⚠️ File '{filename}' not found on GitHub.")
+        return f"⚠️ File '{filename}' not found on GitHub."
 
 # -----------------------------------
 # TAB 1: Determine Lineage (Program1)
@@ -961,10 +966,10 @@ def tab2_delete_lineage():
                         st.markdown("##### Input Preview")
                         st.dataframe(df, use_container_width=True)
 
-                        if st.button("🚀 Process Lineage Creation"):
+                        if st.button("🚀 Process Lineage Deletion"):
                             results = []
                             tbl_rec = 1
-                            with st.spinner("Processing lineage creation..."):
+                            with st.spinner("Processing lineage deletion..."):
                                 for idx, row in df.iterrows():
                                     src_table = str(row.get("Source Table", "")).strip()
                                     src_column = str(row.get("Source Column", "")).strip()
@@ -1679,7 +1684,8 @@ def tab7_github_settings(s):
     with col2:
         if st.button("🗑️ Delete", use_container_width=True):
             if selected:
-                delete_github_file(s["GitHub_Token"], s["Repository_Owner"], s["Repository_Name"], s["Folder_Path"], selected[0])
+                msg = delete_github_file(s["GitHub_Token"], s["Repository_Owner"], s["Repository_Name"], s["Folder_Path"], selected[0])
+                st.toast(msg)
                 refresh_github_files(s, source="env")
                 st.toast("🗑️ File deleted", icon="✅")
                 clear_github_settings_callback()
