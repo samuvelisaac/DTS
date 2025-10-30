@@ -153,13 +153,24 @@ def process_agent(file_content: str):
         agents = output.get("pipeline", {}).get("pipeLineAgents", [])
         tasks = output.get("pipeline", {}).get("tasksOutputs", [])
         raws = {}
+
         for agent, t in zip(agents, tasks):
             name = agent.get("agent", {}).get("name", "agent").strip()
             raw_val = t.get("raw", "")
             if raw_val:
                 curated = raw_val.split("\n\n", 1)[0]
+
+                # 🧠 Handle markdown-like fenced CSV output
+                lines = curated.strip().splitlines()
+                if lines and lines[0].strip().startswith("```csv"):
+                    # Drop first and last line (the ``` markers)
+                    if len(lines) > 2:
+                        curated = "\n".join(lines[1:-1])
+
                 raws[name] = curated
+
         return {"success": True, "raws": raws, "api_duration": api_duration}
+
     except httpx.HTTPStatusError as e:
         try:
             err = r.json()
