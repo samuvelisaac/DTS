@@ -1,0 +1,12 @@
+physical table name,physical attribute name,glossary,category,term name,Column ID,Term ID,Link Mapping Response
+customer_data_bank,full_name,Bank,Customer Data,Full Name,30414,133,"{'status': 'success', 'column id': 30414, 'term id': 133}"
+customer_data_bank,date_of_birth,Bank,Customer Data,Date of Birth,30415,134,"{'status': 'success', 'column id': 30415, 'term id': 134}"
+customer_data_bank,gender,Bank,Customer Data,Gender,30416,135,"{'status': 'success', 'column id': 30416, 'term id': 135}"
+customer_data_bank,address,Bank,Customer Data,Address,30417,136,"{'status': 'success', 'column id': 30417, 'term id': 136}"
+customer_data_bank,phone_number,Bank,Customer Data,Phone Number,30418,137,"{'status': 'success', 'column id': 30418, 'term id': 137}"
+customer_data_bank,email_address,Bank,Customer Data,Email Address,30419,138,"{'status': 'success', 'column id': 30419, 'term id': 138}"
+customer_data_bank,national_id_or_passport_number,Bank,Customer Data,National ID/Passport Number,30420,139,"{'status': 'success', 'column id': 30420, 'term id': 139}"
+customer_data_bank,occupation,Bank,Customer Data,Occupation,30421,140,"{'status': 'success', 'column id': 30421, 'term id': 140}"
+customer_data_bank,customer_type,Bank,Customer Data,Customer Type,30422,141,"{'status': 'success', 'column id': 30422, 'term id': 141}"
+customer_data_bank,account_numbers,Bank,Customer Data,Account Numbers,30423,142,"{'status': 'success', 'column id': 30423, 'term id': 142}"
+customer_data_bank,age,Bank,Customer Data,Age,30424,143,"{'status': 'success', 'column id': 30424, 'term id': 143}"
