@@ -1,0 +1,13 @@
+Source Table,Source Column,Target Table,Target Column,Source Col ID,Target Col ID,Source Desc Update,Target Desc Update,Lineage Response
+VSAM_Customer_Data.csv,Source Table Level,DB2_Customer_Data.csv,Target Table Level,1378,1377,,,"{'error': '{""detail"":""Manual lineage does not exists""}'}"
+VSAM_Customer_Data.csv,FULL_NAME,DB2_Customer_Data.csv,FULL_NAME,30336,30325,"{'status': 'success', 'id': 30336}","{'status': 'success', 'id': 30325}",Successfully Deleted
+VSAM_Customer_Data.csv,DOB,DB2_Customer_Data.csv,DATE_OF_BIRTH,30337,30326,"{'status': 'success', 'id': 30337}","{'status': 'success', 'id': 30326}",Successfully Deleted
+VSAM_Customer_Data.csv,GENDER,DB2_Customer_Data.csv,GENDER,30338,30327,"{'status': 'success', 'id': 30338}","{'status': 'success', 'id': 30327}",Successfully Deleted
+VSAM_Customer_Data.csv,ADDRESS,DB2_Customer_Data.csv,ADDRESS,30339,30328,"{'status': 'success', 'id': 30339}","{'status': 'success', 'id': 30328}",Successfully Deleted
+VSAM_Customer_Data.csv,PHONE,DB2_Customer_Data.csv,PHONE_NUMBER,30340,30329,"{'status': 'success', 'id': 30340}","{'status': 'success', 'id': 30329}",Successfully Deleted
+VSAM_Customer_Data.csv,EMAIL,DB2_Customer_Data.csv,EMAIL_ADDRESS,30341,30330,"{'status': 'success', 'id': 30341}","{'status': 'success', 'id': 30330}",Successfully Deleted
+VSAM_Customer_Data.csv,NATID,DB2_Customer_Data.csv,NATID,30342,30331,"{'status': 'success', 'id': 30342}","{'status': 'success', 'id': 30331}",Successfully Deleted
+VSAM_Customer_Data.csv,OCCUPATION,DB2_Customer_Data.csv,OCCUPATION,30343,30332,"{'status': 'success', 'id': 30343}","{'status': 'success', 'id': 30332}",Successfully Deleted
+VSAM_Customer_Data.csv,CUSTTYPE,DB2_Customer_Data.csv,CUSTOMER_TYPE,30344,30333,"{'status': 'success', 'id': 30344}","{'status': 'success', 'id': 30333}",Successfully Deleted
+VSAM_Customer_Data.csv,ACCNUMS,DB2_Customer_Data.csv,ACCOUNT_NUMBERS,30345,30334,"{'status': 'success', 'id': 30345}","{'status': 'success', 'id': 30334}",Successfully Deleted
+VSAM_Customer_Data.csv,DOB,DB2_Customer_Data.csv,AGE,30337,30335,"{'status': 'success', 'id': 30337}","{'status': 'success', 'id': 30335}",Successfully Deleted
