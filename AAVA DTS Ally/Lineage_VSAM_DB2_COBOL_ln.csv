@@ -1,0 +1,12 @@
+Source Table,Source Column,Target Table,Target Column,Expression,Remarks
+VSAM_Customer_Data.csv,FULL_NAME,DB2_Customer_Data.csv,FULL_NAME,FULL_NAME,No transformation applied
+VSAM_Customer_Data.csv,DOB,DB2_Customer_Data.csv,DATE_OF_BIRTH,STRING DOB(1:4) '-' DOB(5:2) '-' DOB(7:2) DELIMITED BY SIZE INTO HV-DOB-STR,Formatted DOB as YYYY-MM-DD
+VSAM_Customer_Data.csv,GENDER,DB2_Customer_Data.csv,GENDER,GENDER,No transformation applied
+VSAM_Customer_Data.csv,ADDRESS,DB2_Customer_Data.csv,ADDRESS,ADDRESS,No transformation applied
+VSAM_Customer_Data.csv,PHONE,DB2_Customer_Data.csv,PHONE_NUMBER,PHONE,No transformation applied
+VSAM_Customer_Data.csv,EMAIL,DB2_Customer_Data.csv,EMAIL_ADDRESS,EMAIL,No transformation applied
+VSAM_Customer_Data.csv,NATID,DB2_Customer_Data.csv,NATID,NATID,No transformation applied
+VSAM_Customer_Data.csv,OCCUPATION,DB2_Customer_Data.csv,OCCUPATION,OCCUPATION,No transformation applied
+VSAM_Customer_Data.csv,CUSTTYPE,DB2_Customer_Data.csv,CUSTOMER_TYPE,HV-CUSTTYPE,Derived Customer Type based on age and occupation
+VSAM_Customer_Data.csv,ACCNUMS,DB2_Customer_Data.csv,ACCOUNT_NUMBERS,ACCNUMS,No transformation applied
+VSAM_Customer_Data.csv,DOB,DB2_Customer_Data.csv,AGE,COMPUTE HV-AGE = WS-TEMP-Y,Calculated age based on DOB
